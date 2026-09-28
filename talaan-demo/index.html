@@ -17,17 +17,61 @@
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
 button,input,select{font:inherit;color:inherit}
-.app{display:grid;grid-template-columns:240px 1fr;min-height:100vh;background:var(--bg)}
+.app{display:grid;grid-template-columns:280px 1fr;min-height:100vh;background:var(--bg);transition:grid-template-columns .25s cubic-bezier(.16,1,.3,1)}
 .app.logged-out{display:flex;justify-content:center;align-items:center;min-height:100vh;background:var(--bg);padding:32px 16px}
 .app.logged-out nav.side{display:none!important}
 .app.logged-out main{max-width:480px;width:100%;padding:0;margin:auto}
-nav.side{background:#FFFFFF;border-right:1px solid var(--line);padding:24px 16px;display:flex;flex-direction:column;gap:6px}
-.logo{font-weight:800;font-size:22px;color:var(--brand);letter-spacing:-.02em;padding:4px 8px 6px}
-.co{padding:0 8px 16px;color:var(--muted);font-size:13px;line-height:1.4;border-bottom:1px solid var(--line);margin-bottom:10px}
-.navbtn{display:flex;justify-content:space-between;align-items:center;border:0;background:none;text-align:left;padding:10px 12px;border-radius:8px;cursor:pointer;color:var(--muted);font-weight:500;font-size:14px;transition:all .15s ease}
+nav.side{background:#FFFFFF;border-right:1px solid var(--line);padding:20px 14px;display:flex;flex-direction:column;gap:4px;overflow-y:auto;max-height:100vh;position:sticky;top:0;transition:width .25s ease,padding .25s ease}
+.side-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.logo{font-weight:800;font-size:22px;color:var(--brand);letter-spacing:-.02em;padding:4px 4px 6px}
+.sidebar-toggle-btn{background:var(--soft);border:1px solid var(--line);border-radius:6px;width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);transition:all .15s ease}
+.sidebar-toggle-btn:hover{background:var(--line);color:var(--ink)}
+.co{padding:0 4px 14px;color:var(--muted);font-size:13px;line-height:1.4;border-bottom:1px solid var(--line);margin-bottom:10px}
+.navbtn{display:flex;justify-content:space-between;align-items:center;border:0;background:none;text-align:left;padding:9px 12px;border-radius:8px;cursor:pointer;color:var(--muted);font-weight:500;font-size:14px;transition:all .15s ease;position:relative}
 .navbtn:hover{background:var(--soft);color:var(--ink)}
 .navbtn[aria-current="page"]{background:#EFF6FF;color:var(--brand);font-weight:600;box-shadow:inset 4px 0 0 var(--brand)}
-.count{font-size:12px;background:var(--warn-bg);color:var(--warn);padding:2px 8px;border-radius:12px;font-weight:600}
+.nav-content{display:flex;align-items:center;gap:10px;width:100%;overflow:hidden}
+.nav-icon{font-size:16px;flex-shrink:0}
+.nav-label{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.count{font-size:12px;background:var(--warn-bg);color:var(--warn);padding:2px 8px;border-radius:12px;font-weight:600;flex-shrink:0}
+
+/* ===== Desktop Collapsed (Rail) Mode ===== */
+.app.sidebar-collapsed{grid-template-columns:74px 1fr}
+.app.sidebar-collapsed nav.side{padding:20px 10px;align-items:center}
+.app.sidebar-collapsed .logo{font-size:18px;padding:4px 0;text-align:center}
+.app.sidebar-collapsed .co,.app.sidebar-collapsed .userbox .due,.app.sidebar-collapsed .userbox select,.app.sidebar-collapsed .userbox .btn{display:none!important}
+.app.sidebar-collapsed .userbox{padding:6px 0;margin-bottom:8px;border-bottom:1px solid var(--line);text-align:center}
+.app.sidebar-collapsed .userbox .me{font-size:11px}
+.app.sidebar-collapsed .navbtn{justify-content:center;padding:10px 0;width:52px;height:44px;border-radius:10px}
+.app.sidebar-collapsed .nav-content{justify-content:center}
+.app.sidebar-collapsed .navbtn .nav-label{position:absolute;left:100%;top:50%;transform:translateY(-50%) translateX(6px);background:#0F172A;color:#FFFFFF;padding:6px 12px;border-radius:6px;font-size:13px;font-weight:500;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .15s ease,transform .15s ease;z-index:1000;box-shadow:0 4px 14px rgba(0,0,0,0.18)}
+.app.sidebar-collapsed .navbtn:hover .nav-label{opacity:1;transform:translateY(-50%) translateX(10px)}
+.app.sidebar-collapsed .sidebar-toggle-btn svg{transform:rotate(180deg)}
+.app.sidebar-collapsed .count{position:absolute;top:4px;right:4px;padding:2px 5px;font-size:10px;border-radius:10px}
+
+/* ===== Mobile Header & Left Drawer ===== */
+.mobile-header{display:none}
+.pull-tab{display:none}
+.nav-overlay{position:fixed;inset:0;background:rgba(15,23,42,0.4);backdrop-filter:blur(2px);z-index:998;opacity:0;pointer-events:none;transition:opacity .25s ease}
+.nav-overlay.show{opacity:1;pointer-events:auto}
+
+@media (max-width:900px){
+  .app{grid-template-columns:1fr;padding-top:56px}
+  .app.logged-out{padding-top:0}
+  .mobile-header{display:flex;align-items:center;justify-content:space-between;position:fixed;top:0;left:0;right:0;height:56px;background:#FFFFFF;border-bottom:1px solid var(--line);padding:0 16px;z-index:990;box-shadow:0 1px 3px rgba(0,0,0,0.04)}
+  .hamburger-btn{background:none;border:0;color:var(--ink);padding:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:8px}
+  .hamburger-btn:hover{background:var(--soft)}
+  .mobile-brand{font-weight:800;font-size:19px;color:var(--brand)}
+  .mobile-branch{font-size:12px;color:var(--muted);background:var(--soft);padding:4px 10px;border-radius:12px;font-weight:500}
+
+  .pull-tab{display:flex;align-items:center;justify-content:center;position:fixed;left:0;top:50%;transform:translateY(-50%);width:26px;height:54px;background:var(--brand);color:#FFFFFF;border-radius:0 14px 14px 0;box-shadow:2px 4px 14px rgba(30,64,175,0.35);z-index:995;cursor:pointer;transition:all .2s ease}
+  .pull-tab:hover,.pull-tab:active{width:32px}
+
+  nav.side{position:fixed;top:0;left:0;bottom:0;width:300px;max-width:85vw;z-index:1000;box-shadow:4px 0 24px rgba(0,0,0,0.18);transform:translateX(-100%);transition:transform .3s cubic-bezier(.16,1,.3,1);max-height:100vh;border-right:1px solid var(--line)}
+  .app.mobile-nav-open nav.side{transform:translateX(0)}
+  .sidebar-toggle-btn{display:none}
+}
+
 main{padding:28px clamp(16px,3vw,40px);max-width:1240px;width:100%}
 h1{font-size:24px;letter-spacing:-.015em;margin:0;font-weight:700;color:var(--ink)}
 h2{font-size:16px;margin:0 0 12px;font-weight:600;color:var(--ink)}
@@ -258,29 +302,49 @@ pre{background:var(--soft);border:1px solid var(--line);border-radius:8px;paddin
 </style>
 </head>
 <body>
+<div class="mobile-header noprint">
+  <button class="hamburger-btn" id="mobileMenuBtn" aria-label="Open navigation menu">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+  </button>
+  <div class="mobile-brand">Talaan</div>
+  <div class="mobile-branch" id="mobileBranchBox"></div>
+</div>
+
+<div class="pull-tab noprint" id="pullTab" aria-label="Pull to open menu" title="Pull or tap to open menu">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+</div>
+
+<div class="nav-overlay noprint" id="navOverlay"></div>
+
 <div class="app">
   <nav class="side noprint" aria-label="Main">
-    <div class="logo">Talaan</div>
+    <div class="side-head">
+      <div class="logo">Talaan</div>
+      <button class="sidebar-toggle-btn" id="sidebarToggleBtn" title="Collapse sidebar" data-act="togglesidebar">
+        <svg class="icon-collapse" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+      </button>
+    </div>
     <div class="co" id="coBox"></div>
     <div class="userbox" id="userBox"></div>
-    <button class="navbtn" data-go="list">Invoices <span class="count" id="navCount" hidden></span></button>
-    <button class="navbtn" data-go="new">New invoice</button>
-    <button class="navbtn" data-go="tally">Small sales tally</button>
-    <button class="navbtn" data-go="register">Discount register</button>
-    <button class="navbtn" data-go="credits">Credit memos <span class="count" id="cmCount" hidden></span></button>
-    <button class="navbtn" data-go="corrections">Correction notices <span class="count" id="crCount" hidden></span></button>
-    <button class="navbtn" data-go="receipts">Receipts register</button>
-    <button class="navbtn" data-go="customers">Customers</button>
-    <button class="navbtn" data-go="products">Products and stock</button>
-    <button class="navbtn" data-go="verify">Verify a document</button>
-    <button class="navbtn" data-go="ready">RMC 98-2026 readiness</button>
-    <button class="navbtn" data-go="log">EIS transmission log</button>
-    <button class="navbtn" data-go="settings">Company, PTI and permits</button>
-    <button class="navbtn" data-go="fx">Foreign currency</button>
-    <button class="navbtn" data-go="branches">Branches</button>
-    <button class="navbtn" data-go="users">Users and security</button>
-    <button class="navbtn" data-go="design">Invoice design</button>
-    <button class="navbtn" data-go="provider" style="margin-top:14px;border-top:1px solid var(--line);border-radius:0;padding-top:14px">Provider console 🔒</button>
+    <button class="navbtn" data-go="list"><span class="nav-content"><span class="nav-icon">📄</span><span class="nav-label">Invoices</span></span><span class="count" id="navCount" hidden></span></button>
+    <button class="navbtn" data-go="new"><span class="nav-content"><span class="nav-icon">➕</span><span class="nav-label">New invoice</span></span></button>
+    <button class="navbtn" data-go="tally"><span class="nav-content"><span class="nav-icon">📊</span><span class="nav-label">Small sales tally</span></span></button>
+    <button class="navbtn" data-go="register"><span class="nav-content"><span class="nav-icon">🏷️</span><span class="nav-label">Discount register</span></span></button>
+    <button class="navbtn" data-go="credits"><span class="nav-content"><span class="nav-icon">💳</span><span class="nav-label">Credit memos</span></span><span class="count" id="cmCount" hidden></span></button>
+    <button class="navbtn" data-go="corrections"><span class="nav-content"><span class="nav-icon">✏️</span><span class="nav-label">Correction notices</span></span><span class="count" id="crCount" hidden></span></button>
+    <button class="navbtn" data-go="receipts"><span class="nav-content"><span class="nav-icon">🧾</span><span class="nav-label">Receipts register</span></span></button>
+    <button class="navbtn" data-go="customers"><span class="nav-content"><span class="nav-icon">👥</span><span class="nav-label">Customers</span></span></button>
+    <button class="navbtn" data-go="products"><span class="nav-content"><span class="nav-icon">📦</span><span class="nav-label">Products and stock</span></span></button>
+    <button class="navbtn" data-go="verify"><span class="nav-content"><span class="nav-icon">🔍</span><span class="nav-label">Verify a document</span></span></button>
+    <button class="navbtn" data-go="ready"><span class="nav-content"><span class="nav-icon">📋</span><span class="nav-label">RMC 98-2026 readiness</span></span></button>
+    <button class="navbtn" data-go="log"><span class="nav-content"><span class="nav-icon">📡</span><span class="nav-label">EIS transmission log</span></span></button>
+    <button class="navbtn" data-go="settings"><span class="nav-content"><span class="nav-icon">🏢</span><span class="nav-label">Company, PTI and permits</span></span></button>
+    <button class="navbtn" data-go="fx"><span class="nav-content"><span class="nav-icon">💱</span><span class="nav-label">Foreign currency</span></span></button>
+    <button class="navbtn" data-go="branches"><span class="nav-content"><span class="nav-icon">📍</span><span class="nav-label">Branches</span></span></button>
+    <button class="navbtn" data-go="users"><span class="nav-content"><span class="nav-icon">🛡️</span><span class="nav-label">Users and security</span></span></button>
+    <button class="navbtn" data-go="design"><span class="nav-content"><span class="nav-icon">🎨</span><span class="nav-label">Invoice design</span></span></button>
+    <button class="navbtn" data-go="provider" style="margin-top:14px;border-top:1px solid var(--line);border-radius:0;padding-top:14px"><span class="nav-content"><span class="nav-icon">🔒</span><span class="nav-label">Provider console</span></span></button>
+    <button class="navbtn" data-act="signout" style="margin-top:6px;border-top:1px solid var(--line);border-radius:0;padding-top:10px;color:var(--bad)"><span class="nav-content"><span class="nav-icon">🚪</span><span class="nav-label">Sign out</span></span></button>
   </nav>
   <main id="main"></main>
 </div>
@@ -1722,7 +1786,11 @@ function deliver(no,via,to){invOf(no).deliveries.push({via,to,at:now()});render(
 function toast(msg){const t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("show"),2800)}
 
 document.addEventListener("click",e=>{lastActivity=Date.now();
+  const mBtn=e.target.closest("#mobileMenuBtn, #pullTab");
+  if(mBtn){const appEl=document.querySelector(".app"),overlay=document.getElementById("navOverlay");if(appEl){appEl.classList.toggle("mobile-nav-open");if(overlay)overlay.classList.toggle("show",appEl.classList.contains("mobile-nav-open"))}return}
+  if(e.target.closest("#navOverlay")){const appEl=document.querySelector(".app"),overlay=document.getElementById("navOverlay");if(appEl)appEl.classList.remove("mobile-nav-open");if(overlay)overlay.classList.remove("show");return}
   const aa=e.target.closest("[data-act]");
+  if(aa&&aa.dataset.act==="togglesidebar"){const appEl=document.querySelector(".app");if(appEl){appEl.classList.toggle("sidebar-collapsed");try{localStorage.setItem("sidebar_collapsed",appEl.classList.contains("sidebar-collapsed")?"1":"0")}catch(err){}}return}
   if(!me()){if(!aa)return;const act=aa.dataset.act;
     if(act==="signin")doSignin();
     if(act==="authcancel"){auth={step:"login",uid:null,code:null,codeTries:0,err:"",username:""};render()}
@@ -1730,6 +1798,7 @@ document.addEventListener("click",e=>{lastActivity=Date.now();
     if(act==="pwchange"){const u=USERS.find(x=>x.id===auth.uid);if(auth.np1!==auth.np2){auth.err="The passwords don't match.";return render()}if(!pwStrong(auth.np1||"")){auth.err="The password doesn't meet the rules.";return render()}
       u.pw=auth.np1;u.mustChange=false;slog("Password changed","New password set after reset",u);if(u.mfa){auth.step="mfa";auth.code=String(Math.floor(100000+Math.random()*900000));auth.codeTries=0;auth.err="";render()}else finishLogin(u)}
     return}
+  if(window.innerWidth<=900){const appEl=document.querySelector(".app"),overlay=document.getElementById("navOverlay");if(appEl)appEl.classList.remove("mobile-nav-open");if(overlay)overlay.classList.remove("show")}
   if(aa&&aa.dataset.act==="signout"){signOut();return}
   if(aa&&ACT_PERM[aa.dataset.act]&&!need(ACT_PERM[aa.dataset.act]))return;
   if(aa&&aa.dataset.act==="ncsave"&&picker.editId&&!need("master"))return;
@@ -1980,6 +2049,13 @@ ITEMS.find(i=>i.sku==="PAP-A4-80").branchPrices={"00001":225};stockDocs.forEach(
 invoices.forEach(i=>{i.txnDate=todayISO(i.issuedAt);i.nature=i.nature||"GOODS"});
 tally=[["Photocopies, 40 pages",8000,"SSPT",-5],["School supplies",14500,"SSPT",-4],["Vegetable seeds (1 pack)",6500,"EXEMPT",-2],["Snacks and drinks",18000,"SSPT",-1]].map(([desc,amount,tax,h],k)=>({branch:"00000",id:"seed"+k,day:todayISO(),at:now()+h*3600e3,desc,amount,tax,invNo:null})).filter(t=>t.day===todayISO());
 [...invoices,...receipts].forEach(x=>x.buyer=snap(x.customerId));
+try{if(localStorage.getItem("sidebar_collapsed")==="1"){const appEl=document.querySelector(".app");if(appEl)appEl.classList.add("sidebar-collapsed")}}catch(err){}
+let touchStartX=0;
+document.addEventListener("touchstart",e=>{if(e.touches.length===1)touchStartX=e.touches[0].clientX},{passive:true});
+document.addEventListener("touchend",e=>{if(window.innerWidth>900)return;const touchEndX=e.changedTouches[0].clientX,diffX=touchEndX-touchStartX,appEl=document.querySelector(".app"),overlay=document.getElementById("navOverlay");
+  if(touchStartX<40&&diffX>40){if(appEl)appEl.classList.add("mobile-nav-open");if(overlay)overlay.classList.add("show")}
+  else if(diffX<-40&&appEl&&appEl.classList.contains("mobile-nav-open")){if(appEl)appEl.classList.remove("mobile-nav-open");if(overlay)overlay.classList.remove("show")}
+},{passive:true});
 render();
 initSigning().then(async()=>{for(const i of invoices)await signDoc(i,"INV");for(const c of credits)await signDoc(c,"CM");render()});
 </script>
