@@ -250,8 +250,8 @@ def transmit(encrypted: str, access_token: str, dry_run: bool = True) -> dict:
 if __name__ == "__main__":
     inv = Invoice(
         invoice_no="SI-0000123",
-        seller=Party("SAMPLE TRADING CORP.", "123-456-789-00000",
-                     "Aseana City, Parañaque City", "Sample Trading"),
+        seller=Party("BIZMAKER CONSULTANCY INC.", "010-386-422-00000",
+                     "P41 - 10 6th - 11th Street, Villamor Air Base, Barangay 183, 1300 Pasay City", "BIZMAKER CONSULTANCY INC."),
         buyer=Party("BUYER INC.", "987-654-321-00000", "Makati City"),
         items=[
             LineItem("Tax advisory retainer - Sept 2026", Decimal("1"), Decimal("50000")),

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -355,7 +355,7 @@ pre{background:var(--soft);border:1px solid var(--line);border-radius:8px;paddin
 <script>
 /* ================= Company, PTI and permit settings ================= */
 const S={
-  vat:true,trade:"MAHARLIKA",name:"MAHARLIKA SUPPLIES CORP.",tin:"123-456-789-00000",
+  vat:true,trade:"BIZMAKER CONSULTANCY INC.",name:"BIZMAKER CONSULTANCY INC.",tin:"010-386-422-00000",
   address:"Unit 12, Aseana One Bldg., Aseana City, Parañaque City 1702",
   invFrom:5000001,invTo:5000500,prFrom:6000001,prTo:6000500,cnFrom:7000001,cnTo:7000500,crFrom:8000001,crTo:8000500,
   permitNo:"CAS-PTU-0426-00012",atpNo:"OCN 3AU0000080582",atpDate:"2026-02-23",
@@ -368,9 +368,9 @@ const CERT="AAACERT1",DAY=864e5,now=()=>Date.now();
 const FONTS={"Arial, Helvetica, sans-serif":"Arial","Verdana, Geneva, sans-serif":"Verdana","Tahoma, Geneva, sans-serif":"Tahoma","Georgia, 'Times New Roman', serif":"Georgia (serif)"};
 const SIZES={0.92:"Small",1:"Standard",1.08:"Large"};
 const PROVIDER={name:"AAA & Co. IT Division (EIS provider)",pin:"2468"};
-let designs=[{v:1,logo:null,primary:"#0B2A5B",accent:"#D0021B",font:"Arial, Helvetica, sans-serif",fs:1,tr:17,effective:new Date("2026-09-24").getTime(),
+let designs=[{v:1,logo:"logo.png",primary:"#0B2A5B",accent:"#D0021B",font:"Arial, Helvetica, sans-serif",fs:1,tr:17,effective:new Date("2026-09-24").getTime(),
   birRef:{type:"PTI Electronic Invoice (initial)",no:"PTI-EI-0426-2026-000123",date:"2026-09-24"},dcr:null,summary:"Initial design at go-live",by:PROVIDER.name}];
-let dcrs=[{id:"DCR-0001",at:Date.now()-2*864e5,areas:["Logo"],desc:"Replace the circle mark with our new MAHARLIKA logo (file to follow).",contact:"Maria Santos, Finance",logo:null,status:"Submitted",
+let dcrs=[{id:"DCR-0001",at:Date.now()-2*864e5,areas:["Logo"],desc:"Replace the circle mark with our new BIZMAKER CONSULTANCY INC. logo.",contact:"Maria Santos, Finance",logo:"logo.png",status:"Submitted",
   history:[{at:Date.now()-2*864e5,status:"Submitted",by:"Client",note:""}],birRef:null,version:null}];
 let designAudit=[{at:new Date("2026-09-24").getTime(),by:PROVIDER.name,action:"Activated design version 1 (initial design at go-live)"}];
 let providerOn=false,pDraft=null,dcrDraft=null;
