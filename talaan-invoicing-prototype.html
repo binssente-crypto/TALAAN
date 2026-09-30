@@ -592,8 +592,8 @@ pre{background:var(--soft);border:1px solid var(--line);border-radius:8px;paddin
   <main id="main"></main>
 </div>
 <div id="helpRoot"></div>
-<div class="toast" id="toast" role="status" aria-live="polite"></div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
 /* === Responsive Drawer & Sidebar Rail Event Handlers === */
 try {
   if (localStorage.getItem("sidebar_collapsed") === "1") {
@@ -917,7 +917,8 @@ function daysBetween(a,b){return Math.round((new Date(b+"T12:00:00")-new Date(a+
 let agingAsOf="",agingOpen=null;
 const AGE_B=[["cur","Not yet due"],["b30","1–30 days past due"],["b60","31–60 days"],["b90","61–90 days"],["b91","Over 90 days"]];
 function agingData(asOf){const rows={};invoices.filter(i=>i.salesType==="CHARGE"&&!isCancelled(i)&&inBr(i.branch)&&(i.txnDate||todayISO(i.issuedAt))<=asOf).forEach(i=>{
-    const due=calc(i).due-creditTotal(i.no)-collections(i.no).filter(x=>todayISO(x.r.at)<=asOf).reduce((a,x)=>a+x.amount,0);if(due<=0)return;
+    const cmDue=creditsOf(i.no).filter(c=>todayISO(c.at)<=asOf).reduce((a,c)=>a+cnCalc(c).due,0);
+    const due=calc(i).due-cmDue-collections(i.no).filter(x=>todayISO(x.r.at)<=asOf).reduce((a,x)=>a+x.amount,0);if(due<=0)return;
     const P=toPHP(i,due),od=daysBetween(dueDateOf(i),asOf),k=od<=0?"cur":od<=30?"b30":od<=60?"b60":od<=90?"b90":"b91",c=cust(i.customerId)||{name:"(unknown)"};
     const r=rows[i.customerId]=rows[i.customerId]||{name:(i.buyer||c).name,cur:0,b30:0,b60:0,b90:0,b91:0,total:0,invs:[]};r[k]+=P;r.total+=P;r.invs.push({i,P,od,k,due:dueDateOf(i)})});
   return Object.entries(rows).map(([id,r])=>({id,...r})).sort((a,b)=>b.total-a.total)}
@@ -2386,8 +2387,8 @@ function kSuggHtml(){if(!kSugg.list.length)return "";return `<div class="ksugg" 
 function kFindItems(q){q=q.trim().toLowerCase();if(!q)return [];return ITEMS.filter(i=>!i.inactive&&(i.barcode===q||i.sku.toLowerCase().includes(q)||i.desc.toLowerCase().includes(q))).slice(0,6)}
 function kPickItem(k,item){const r=kRows[k];applyItem(r,item);delete r.taxReason;r.q="";if(!(Number(r.qty)>0))r.qty="1";if(kRows.every(x=>x.sku))kRows.push(kBlank());kSugg={row:-1,list:[],hi:0,kind:null};kRefresh();const q=document.querySelector(`[data-kline="${k}"][data-kk="qty"]`);if(q){q.focus();q.select()}}
 function kPickBuyer(c){kBuyer={...c};kSugg={row:-1,list:[],hi:0,kind:null};kRefresh();const n=document.querySelector('[data-kb="tin"],[data-kb="country"]');if(n)n.focus()}
-function kRefresh(){kSync();const a=document.activeElement,key=a&&[a.dataset.kline,a.dataset.kk,a.dataset.kb,a.dataset.kst,a.dataset.ktender,a.dataset.kgrp].join("|"),pos=a&&a.selectionStart;render();
-  if(key&&key!=="|||||"){const el=[...document.querySelectorAll("input")].find(e=>[e.dataset.kline,e.dataset.kk,e.dataset.kb,e.dataset.kst,e.dataset.ktender,e.dataset.kgrp].join("|")===key);if(el){el.focus();try{el.setSelectionRange(pos,pos)}catch(e){}}}}
+function kRefresh(){kSync();const a=document.activeElement,key=a&&[a.dataset.kline,a.dataset.kk,a.dataset.kb,a.dataset.kst,a.dataset.ktender,a.dataset.kgrp,a.dataset.kpay,a.dataset.klate,a.dataset.kwhtp,a.dataset.kwhta].join("|"),pos=a&&a.selectionStart;render();
+  if(key&&key!=="|||||||||"){const el=[...document.querySelectorAll("input")].find(e=>[e.dataset.kline,e.dataset.kk,e.dataset.kb,e.dataset.kst,e.dataset.ktender,e.dataset.kgrp,e.dataset.kpay,e.dataset.klate,e.dataset.kwhtp,e.dataset.kwhta].join("|")===key);if(el){el.focus();try{el.setSelectionRange(pos,pos)}catch(e){}}}}
 function kIssue(){if(!draft||!kChecks().every(x=>x[0]))return;
   {const c0=cust(draft.customerId),em=(kBuyer.email||"").trim();if(c0&&c0.id!=="ktemp"&&c0.id!=="cw"&&em&&c0.email!==em){c0.email=em;slog("Customer email updated at counter",`${c0.name}: ${em}`)}}
   if(draft.customerId==="ktemp"){const t=CUSTOMERS.find(c=>c.id==="ktemp");t.id="c"+(CUSTOMERS.length+1)+rand(3);draft.customerId=t.id;slog("Customer added at counter",t.name)}
