@@ -62,7 +62,7 @@ function blankLine(){return {sku:"",desc:"",qty:"",q:""}}
 function newInvoice(){inv={date:TODAY,dateOk:false,lateReason:"",vat:STORE.vat,cur:"PHP",sales:"CASH",buyer:{...CUSTOMERS[0]},lines:[blankLine(),blankLine(),blankLine(),blankLine()],st:null,stId:"",stName:"",stExtra:"",stOk:false,diners:"",bens:"",tender:""};view=null}
 
 /* ============ Computation ============ */
-function unitPrice(v,it){return v.cur==="PHP"?it.price:Math.round(it.price/FX[v.cur].rate*100)/100}
+function unitPrice(v,it){const r=v.fx?v.fx.rate:(FX[v.cur]?FX[v.cur].rate:1);return v.cur==="PHP"?it.price:Math.round(it.price/r*100)/100}
 function taxOf(v,it){return v.vat?it.tax:(it.tax==="EXEMPT"?"EXEMPT":"SSPT")}
 function covKey(T){return {SC:"q20",PWD:"q20",NAAC:"naac",MOV:"mov",SP:"sp"}[T]}
 function groupF(v){const d=+v.diners,b=+v.bens;return v.st&&v.st!=="SP"&&d>0&&b>0&&b<d?b/d:1}
@@ -96,6 +96,7 @@ function format(v){const used=v.lines.filter(l=>l.sku&&Number(l.qty)>0).map(l=>t
 function checks(v){const c=calc(v),used=v.lines.filter(l=>l.sku&&Number(l.qty)>0),b=v.buyer,out=[],T=v.st;
   out.push([used.length>0,"At least one item with a quantity"]);
   out.push([v.lines.every(l=>!l.q||l.sku),"Every item picked from the product list"]);
+  out.push([v.lines.filter(l=>l.sku).every(l=>Number(l.qty)>0&&isFinite(l.qty)),"Valid positive quantity for every selected item"]);
   out.push([!!b.name.trim(),"Buyer's name (or \"Walk-in customer\")"]);
   if(b.type==="FOREIGN")out.push([!!(b.country||"").trim()&&!!b.address.trim(),"Foreign buyer's country and address"]);
   else if(b.tin)out.push([TIN_RE.test(b.tin),"Buyer TIN in ###-###-###-##### format"]);
@@ -242,8 +243,8 @@ function modalHtml(){const m=modal;
     <div style="display:flex;gap:8px;margin-top:14px"><button class="btn" data-act="close">Cancel</button><button class="btn" data-act="sendreq" style="border-color:var(--go);color:var(--go)">Send to supervisor</button></div></div></div>`}
   return ""}
 function renderQR(){document.querySelectorAll("[data-qr]").forEach(el=>{try{new QRCode(el,{text:el.dataset.qr,width:128,height:128,correctLevel:QRCode.CorrectLevel.M})}catch(e){el.textContent="[QR]"}})}
-function refresh(){const a=document.activeElement,key=a&&[a.dataset.line,a.dataset.k,a.dataset.buyer,a.dataset.stf,a.dataset.tender].join("|"),pos=a&&a.selectionStart;render();
-  if(key&&key!=="||||"){const el=[...document.querySelectorAll("input")].find(e=>[e.dataset.line,e.dataset.k,e.dataset.buyer,e.dataset.stf,e.dataset.tender].join("|")===key);if(el){el.focus();try{el.setSelectionRange(pos,pos)}catch(e){}}}}
+function refresh(){const a=document.activeElement,key=a&&[a.dataset.line,a.dataset.k,a.dataset.buyer,a.dataset.stf,a.dataset.tender,a.dataset.late].join("|"),pos=a&&a.selectionStart;render();
+  if(key&&key!=="|||||"){const el=[...document.querySelectorAll("input")].find(e=>[e.dataset.line,e.dataset.k,e.dataset.buyer,e.dataset.stf,e.dataset.tender,e.dataset.late].join("|")===key);if(el){el.focus();try{el.setSelectionRange(pos,pos)}catch(e){}}}}
 
 /* ============ Lookup ============ */
 function findItems(q){q=q.trim().toLowerCase();if(!q)return [];return ITEMS.filter(i=>i.barcode===q||i.sku.toLowerCase().includes(q)||i.desc.toLowerCase().includes(q)).slice(0,6)}
@@ -253,7 +254,7 @@ function pickItem(k,it){const l=inv.lines[k];Object.assign(l,{sku:it.sku,desc:it
 function pickBuyer(b){inv.buyer={...b};sugg={row:-1,list:[],hi:0,kind:null};refresh();const n=document.querySelector('[data-buyer="tin"],[data-buyer="country"],[data-buyer="address"]');if(n)n.focus()}
 
 /* ============ Issue ============ */
-function issue(){if(view||!checks(inv).every(x=>x[0]))return;if(db.next>SELLER.series[1]){toast("The invoice series is used up. Call a supervisor.");return}
+function issue(){if(!me||!inv||view||!checks(inv).every(x=>x[0]))return;if(db.next>SELLER.series[1]){toast("The invoice series is used up. Call a supervisor.");return}
   calc(inv);const no=db.next++,on=inv.date;
   const d={...inv,st:inv.cur==="PHP"?inv.st:null,fx:inv.cur!=="PHP"?{...FX[inv.cur]}:null,lines:inv.lines.filter(l=>l.sku&&Number(l.qty)>0).map(l=>{const p=promoFor(l.sku,on);const it=itemBy(l.sku);return {frozen:{sku:it.sku,desc:it.desc,uom:it.uom,price:it.price,tax:it.tax,cov:{...it.cov}},sku:l.sku,desc:l.desc,qty:l.qty,uom:l.uom,promoPct:l.res&&l.res.promo?p.pct:0,promoName:l.res&&l.res.promo?p.name:"",bnpc:l.res?l.res.bnpc:0}}),
     no,at:Date.now(),date:inv.date,lateReason:inv.date<TODAY?inv.lateReason:"",lateBy:inv.date<TODAY?SUPERVISOR.name:"",issued:true,cashier:me.id,cashierName:me.name,sent:[],verify:`https://verify.talaan.ph/v/${Math.random().toString(16).slice(2,10)}${Date.now().toString(16).slice(-8)}`};
@@ -272,7 +273,7 @@ document.addEventListener("click",e=>{
   const a=e.target.closest("[data-act]");if(!a){if(sugg.kind&&!e.target.closest(".sugg")){sugg={row:-1,list:[],hi:0,kind:null};refresh()}return}
   const act=a.dataset.act;
   if(act==="signin"){const k=CASHIERS.find(x=>x.id===$("#who").value);if($("#pin").value===k.pin){me=k;shiftStart=Date.now();newInvoice();render();setTimeout(()=>{const f=document.querySelector('[data-line="0"][data-k="q"]');if(f)f.focus()},50)}else $("#perr").textContent="Wrong PIN. Try again."}
-  if(act==="signout"){me=null;modal=null;render()}
+  if(act==="signout"){me=null;inv=null;view=null;modal=null;render()}
   if(act==="issue")issue();
   if(act==="next"){newInvoice();render();const f=document.querySelector('[data-line="0"][data-k="q"]');if(f)f.focus()}
   if(act==="print")window.print();

@@ -58,6 +58,13 @@ PH_TZ = timezone(timedelta(hours=8))  # Philippine Standard Time
 CENT = Decimal("0.01")
 TIN_RE = re.compile(r"^\d{3}-\d{3}-\d{3}-\d{5}$")
 
+
+def parse_issue_datetime(val: str) -> datetime:
+    dt = datetime.fromisoformat(str(val).replace("Z", "+00:00"))
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=PH_TZ)
+    return dt.astimezone(PH_TZ)
+
 # ---------------------------------------------------------------------------
 # 1. Configuration: fill in from the BIR onboarding documents
 # ---------------------------------------------------------------------------
@@ -137,7 +144,7 @@ def validate(doc: dict) -> list[str]:
         p.append("IssueDateTime missing")
     else:
         try:
-            datetime.fromisoformat(str(issued).replace("Z", "+00:00")).astimezone(PH_TZ)
+            parse_issue_datetime(str(issued))
         except (ValueError, TypeError):
             p.append(f"invalid IssueDateTime format '{issued}'")
 
@@ -326,7 +333,7 @@ def days_late(doc: dict) -> int:
     if not issued:
         return 0
     try:
-        t = datetime.fromisoformat(str(issued).replace("Z", "+00:00")).astimezone(PH_TZ)
+        t = parse_issue_datetime(str(issued))
         return (datetime.now(PH_TZ).date() - t.date()).days
     except (ValueError, TypeError):
         return 0
