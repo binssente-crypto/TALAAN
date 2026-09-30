@@ -44,7 +44,7 @@ import re
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal, DecimalException
 from pathlib import Path
 from typing import Any
 
@@ -125,12 +125,21 @@ class Result:
 
 def validate(doc: dict) -> list[str]:
     p: list[str] = []
-    dtype = doc.get("DocumentType", "INVOICE")
+    dtype = str(doc.get("DocumentType") or "INVOICE").upper()
     doc_no = doc.get("InvoiceNo") or doc.get("CreditMemoNo")
     if not doc_no:
         p.append("document number missing")
     if not doc.get("EisUniqueId"):
         p.append("EIS unique ID missing")
+
+    issued = doc.get("IssueDateTime")
+    if not issued:
+        p.append("IssueDateTime missing")
+    else:
+        try:
+            datetime.fromisoformat(str(issued).replace("Z", "+00:00")).astimezone(PH_TZ)
+        except (ValueError, TypeError):
+            p.append(f"invalid IssueDateTime format '{issued}'")
 
     seller = doc.get("Seller") or {}
     for k in ("RegisteredName", "TIN", "Address"):
@@ -195,12 +204,37 @@ def validate(doc: dict) -> list[str]:
 
     cur = doc.get("Currency", "PHP")
     if cur != "PHP":
-        if not doc.get("ExchangeRate") or not doc.get("RateSource"):
+        fx_val = None
+        if not doc.get("RateSource"):
             p.append(
-                "foreign-currency document without the exchange rate and its source (BAP/BSP)"
+                "foreign-currency document without rate source (BAP/BSP)"
             )
+        fx_raw = doc.get("ExchangeRate")
+        if fx_raw is None or fx_raw == "":
+            p.append("foreign-currency document without exchange rate")
+        else:
+            try:
+                fx_rate = Decimal(str(fx_raw))
+                if not fx_rate.is_finite() or fx_rate <= 0:
+                    p.append("exchange rate must be a finite positive number")
+                else:
+                    fx_val = fx_rate
+            except (DecimalException, ValueError):
+                p.append(f"invalid exchange rate '{fx_raw}'")
+
         if doc.get("TotalAmountDuePHP") is None:
             p.append("foreign-currency document without the peso equivalent")
+        elif fx_val is not None:
+            try:
+                due_fcy = money(doc.get("TotalAmountDue", 0))
+                expected_php = (due_fcy * fx_val).quantize(CENT, rounding=ROUND_HALF_UP)
+                actual_php = money(doc.get("TotalAmountDuePHP"))
+                if abs(actual_php - expected_php) > Decimal("0.05"):
+                    p.append(
+                        f"TotalAmountDuePHP ({actual_php}) does not match TotalAmountDue ({due_fcy}) * ExchangeRate ({fx_val}) = {expected_php}"
+                    )
+            except (DecimalException, ValueError):
+                p.append("invalid TotalAmountDuePHP numeric value")
 
     pay = doc.get("Payment") or {}
     if (
@@ -291,8 +325,11 @@ def days_late(doc: dict) -> int:
     issued = doc.get("IssueDateTime")
     if not issued:
         return 0
-    t = datetime.fromisoformat(issued.replace("Z", "+00:00")).astimezone(PH_TZ)
-    return (datetime.now(PH_TZ).date() - t.date()).days
+    try:
+        t = datetime.fromisoformat(str(issued).replace("Z", "+00:00")).astimezone(PH_TZ)
+        return (datetime.now(PH_TZ).date() - t.date()).days
+    except (ValueError, TypeError):
+        return 0
 
 
 def run(path: Path, send: bool, token: str) -> list[Result]:
@@ -300,17 +337,18 @@ def run(path: Path, send: bool, token: str) -> list[Result]:
     key = bir = None
     results: list[Result] = []
     for doc in load_documents(path):
+        doc["DocumentType"] = str(doc.get("DocumentType") or "INVOICE").upper()
+        dtype = doc["DocumentType"]
         doc_id = str(doc.get("InvoiceNo") or doc.get("CreditMemoNo") or "?")
         try:
             problems = validate(doc)
-        except (ValueError, TypeError, KeyError, AttributeError) as e:
+        except (ValueError, TypeError, KeyError, AttributeError, DecimalException) as e:
             problems = [f"validation error: {e}"]
         if problems:
             results.append(Result(doc_id, False, problems, []))
             continue
         payload = to_eis(doc)
         files = []
-        dtype = str(doc.get("DocumentType") or "INVOICE").upper()
         if dtype not in {"INVOICE", "CREDIT_MEMO", "DEBIT_MEMO"}:
             results.append(
                 Result(doc_id, False, [f"unsupported DocumentType '{dtype}'"], [])
