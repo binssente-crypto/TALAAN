@@ -1,0 +1,38 @@
+{
+  "DocumentType": "INVOICE",
+  "InvoiceNo": "SI-2026-00001",
+  "EisUniqueId": "20260930XXXXXXXXABCD1234",
+  "Format": "VAT",
+  "IssueDateTime": "2026-09-30T10:00:00+08:00",
+  "TransactionDate": "2026-09-30",
+  "SalesType": "CASH",
+  "Seller": {
+    "RegisteredName": "BIZMAKER CONSULTANCY INC.",
+    "TIN": "010-386-422-00000",
+    "Address": "P41 - 10 6th - 11th Street, Villamor Air Base, Pasay City"
+  },
+  "Buyer": {
+    "RegisteredName": "SAMPLE ENTERPRISE CORP.",
+    "TIN": "123-456-789-00000",
+    "Address": "Makati City"
+  },
+  "Items": [
+    {
+      "Description": "Professional Consulting Services",
+      "Quantity": 1,
+      "UnitCost": "10000.00",
+      "TaxType": "VATABLE",
+      "NetAmount": "10000.00",
+      "VatAmount": "1200.00"
+    }
+  ],
+  "VatableSales": "10000.00",
+  "VatAmount": "1200.00",
+  "ZeroRatedSales": "0.00",
+  "VatExemptSales": "0.00",
+  "TotalSales": "11200.00",
+  "Discount": "0.00",
+  "WithholdingTax": "0.00",
+  "TotalAmountDue": "11200.00",
+  "PtiElectronicInvoiceNo": "PTI-2026-00123"
+}
