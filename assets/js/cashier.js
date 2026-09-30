@@ -32,15 +32,14 @@ const ST={SC:{label:"Senior citizen",short:"SC",id:"OSCA or government ID no.",l
   NAAC:{label:"Athlete or coach",short:"NAAC",id:"PNSTM ID no.",law:"RA 10699"},MOV:{label:"Medal of Valor",short:"MOV",id:"MOV or dependent ID no.",law:"RA 9049"},SP:{label:"Solo parent",short:"SP",id:"Solo Parent ID no.",law:"RA 11861"}};
 const TIN_RE=/^\d{3}-\d{3}-\d{3}-\d{5}$/,BNPC_CAP=12500;
 
-/* ============ Persistence (this device only in the demo) ============ */
-const KEY="talaan-counter-bizmaker-v2";
+/* ============ Demo State (in-memory: fresh clean slate on reload) ============ */
 let db={next:SELLER.series[0],invoices:[],requests:[],stock:{}};
-try{const raw=localStorage.getItem(KEY);if(raw)db=Object.assign(db,JSON.parse(raw))}catch(e){}
+try{localStorage.removeItem("talaan-counter-bizmaker-v2")}catch(e){}
 ITEMS.forEach(i=>{if(i.stock!=null&&db.stock[i.sku]==null)db.stock[i.sku]=i.stock});
 const SUPERVISOR={name:"Jose Reyes, Finance manager",pin:"9999"};
 function onHand(sku){return db.stock[sku]}
 function inDraft(sku,except){return inv?inv.lines.reduce((a,l,i)=>a+(l.sku===sku&&i!==except?Number(l.qty||0):0),0):0}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){}}
+function save(){}
 
 /* ============ Helpers ============ */
 const $=s=>document.querySelector(s);
