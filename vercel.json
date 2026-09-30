@@ -3,7 +3,11 @@
   "cleanUrls": true,
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/cashier",
+      "destination": "/cashier.html"
+    },
+    {
+      "source": "/((?!assets/|docs/|cashier.html).*)",
       "destination": "/index.html"
     }
   ]

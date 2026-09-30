@@ -5,3 +5,5 @@ __pycache__/
 .pytest_cache/
 eis_out/
 keys/
+tools/eis_out/
+tools/keys/

@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import os
 import re
@@ -310,8 +311,14 @@ def run(path: Path, send: bool, token: str) -> list[Result]:
         payload = to_eis(doc)
         files = []
         dtype = str(doc.get("DocumentType") or "INVOICE").upper()
+        if dtype not in {"INVOICE", "CREDIT_MEMO", "DEBIT_MEMO"}:
+            results.append(
+                Result(doc_id, False, [f"unsupported DocumentType '{dtype}'"], [])
+            )
+            continue
         clean_id = re.sub(r"[^\w\-.]", "_", doc_id)
-        file_stem = f"{dtype}_{clean_id}"
+        digest = hashlib.sha256(doc_id.encode("utf-8")).hexdigest()[:8]
+        file_stem = f"{dtype}_{clean_id}_{digest}"
         plain = OUT_DIR / f"{file_stem}.json"
         plain.write_text(
             json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
