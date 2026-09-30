@@ -1,12 +1,13 @@
 {
-  "framework": null,
-  "buildCommand": null,
-  "outputDirectory": ".",
   "cleanUrls": true,
   "rewrites": [
     {
       "source": "/cashier",
       "destination": "/cashier.html"
+    },
+    {
+      "source": "/((?!assets/|docs/).*)",
+      "destination": "/index.html"
     }
   ]
 }
