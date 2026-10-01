@@ -529,6 +529,13 @@ function phNow() {
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    second: "2-digit",
+  });
+}
+function updatePhClock() {
+  const t = phNow();
+  document.querySelectorAll("[data-phclock]").forEach((el) => {
+    el.textContent = t;
   });
 }
 function isoDate(iso) {
@@ -1365,6 +1372,23 @@ function decideSC(inv) {
   });
 }
 function calc(inv) {
+  if (!inv || !Array.isArray(inv.items)) {
+    return {
+      vatable: 0,
+      vat: 0,
+      zero: 0,
+      exempt: 0,
+      sspt: 0,
+      totalSales: 0,
+      lessVat: 0,
+      netOfVat: 0,
+      disc: 0,
+      addVat: 0,
+      wht: 0,
+      due: 0,
+      vatShown: 0,
+    };
+  }
   if (inv.status === "draft") {
     inv.items.forEach((it) => {
       delete it.scChoice;
@@ -1515,6 +1539,7 @@ function whtOf(inv, base) {
   return Math.round(base * (inv.wht || 0));
 }
 function formatOf(inv) {
+  if (!inv || !Array.isArray(inv.items)) return "B1";
   const t = new Set(inv.items.map((i) => i.tax));
   if (inv.vat) {
     if (t.size === 1 && t.has("EXEMPT")) return "B3";
@@ -1566,11 +1591,34 @@ function leftBox(f, c) {
 
 /* ================= Credit memos (RMC 98-2026 IV.8) ================= */
 function cnPseudo(cn) {
-  const inv = invOf(cn.invNo);
+  const inv = invOf(cn && cn.invNo);
+  const lines = cn && Array.isArray(cn.lines) ? cn.lines : [];
+  if (!inv || !Array.isArray(inv.items)) {
+    return {
+      vat: true,
+      incl: false,
+      scpwd: null,
+      scFrozen: true,
+      group: null,
+      wht: 0,
+      whtMode: "RATE",
+      whtAmt: 0,
+      items: lines.map((l, idx) => ({
+        desc: (l && l.desc) || "Credit adjustment",
+        qty: (l && l.qty) || 1,
+        price: ((l && l.amount) || 0) / 100,
+        tax: "VATABLE",
+        disc: 0,
+        scChoice: "NONE",
+        bnpcDisc: 0,
+        stDisc: 0,
+      })),
+    };
+  }
   const origCalc = calc(inv);
-  const creditSum = cn.lines.reduce((a, l) => a + l.amount, 0);
+  const creditSum = lines.reduce((a, l) => a + (l.amount || 0), 0);
   const invSum = inv.items.reduce((a, it) => a + lineNet(it), 0) || 1;
-  const propWht = Math.round((origCalc.wht * creditSum) / invSum);
+  const propWht = Math.round(((origCalc.wht || 0) * creditSum) / invSum);
   return {
     vat: inv.vat,
     incl: inv.incl,
@@ -1580,21 +1628,21 @@ function cnPseudo(cn) {
     wht: inv.wht,
     whtMode: inv.whtMode,
     whtAmt: inv.whtMode === "AMT" ? propWht / 100 : inv.whtAmt,
-    items: cn.lines.map((l) => {
-      const o = inv.items[l.src],
+    items: lines.map((l) => {
+      const o = (inv.items && inv.items[l.src]) || inv.items[0] || { desc: "Credit adjustment", tax: "VATABLE" },
         R = lineNet(o) || 1;
       return {
-        desc: o.desc,
+        desc: o.desc || "Credit adjustment",
         qty: 1,
-        price: l.amount / 100,
-        tax: o.tax,
+        price: ((l && l.amount) || 0) / 100,
+        tax: o.tax || "VATABLE",
         disc: 0,
         scChoice: o.scChoice,
         bnpcDisc:
           o.scChoice === "BNPC5"
-            ? Math.round(((o.bnpcDisc || 0) * l.amount) / R)
+            ? Math.round(((o.bnpcDisc || 0) * (l.amount || 0)) / R)
             : 0,
-        stDisc: o.stDisc ? Math.round((o.stDisc * l.amount) / R) : 0,
+        stDisc: o.stDisc ? Math.round(((o.stDisc || 0) * (l.amount || 0)) / R) : 0,
       };
     }),
   };
@@ -2447,15 +2495,15 @@ function docInvoice(inv, override) {
   <p class="fmtline noprint">Printed in RMC 77-2024 Annex ${f} format: ${FORMATS[f]}. Design version ${dz.v}.</p>`;
 }
 function docCredit(cn) {
-  const dz = designV(cn.designV || curDesign().v),
-    inv = invOf(cn.invNo),
-    b = cn.buyer || inv.buyer || cust(inv.customerId),
+  const dz = designV((cn && cn.designV) || curDesign().v),
+    inv = invOf(cn && cn.invNo) || { no: (cn && cn.invNo) || "—", branch: (cn && cn.branch) || "00000", issuedAt: (cn && cn.at) || now(), vat: true, items: [] },
+    b = (cn && cn.buyer) || inv.buyer || cust(inv.customerId) || { name: "Valued Customer", address: "—" },
     c = cnCalc(cn),
     f = formatOf(inv);
-  const rows = cn.lines.map(
-    (l) =>
-      `<tr><td>${esc(cn.reason)}: ${esc(inv.items[l.src].desc)}${l.qty ? ` (${fmtQty(l.qty)} ${esc(inv.items[l.src].uom || "")})` : ""}${inv.items[l.src].sku ? `<br><span style="font-size:10px">SKU ${esc(inv.items[l.src].sku)}</span>` : ""}</td><td>${inv.vat ? TAX_VAT[inv.items[l.src].tax] : TAX_NV[inv.items[l.src].tax]}</td><td class="r">${amt(l.amount)}</td></tr>`,
-  );
+  const rows = ((cn && cn.lines) || []).map((l) => {
+    const it = (inv.items && inv.items[l.src]) || { desc: (cn && cn.reason) || "Credit adjustment", tax: "VATABLE" };
+    return `<tr><td>${esc((cn && cn.reason) || "Credit adjustment")}: ${esc(it.desc || "Item")}${l.qty ? ` (${fmtQty(l.qty)} ${esc(it.uom || "")})` : ""}${it.sku ? `<br><span style="font-size:10px">SKU ${esc(it.sku)}</span>` : ""}</td><td>${inv.vat ? TAX_VAT[it.tax] || it.tax : TAX_NV[it.tax] || it.tax}</td><td class="r">${amt((l && l.amount) || 0)}</td></tr>`;
+  });
   while (rows.length < 3) rows.push("<tr><td></td><td></td><td></td></tr>");
   const lb = inv.vat
     ? [
@@ -2485,19 +2533,20 @@ function docCredit(cn) {
           ["Less: Withholding Tax", c.wht],
           ["TOTAL AMOUNT CREDITED", c.due, 1],
         ];
+  const sSnap = (cn && cn.seller) || sellerSnap((inv && inv.branch) || (cn && cn.branch) || "00000");
   return `<div class="paperwrap"><article class="paper" style="${paperStyle(dz)}" aria-label="Credit memo"><div class="band"></div><div class="in">
-   <div class="hdr">${sellerBlock(inv.vat, dz, cn.seller || sellerSnap(inv.branch))}<div class="title"><div class="big">CREDIT MEMO</div></div></div>
+   <div class="hdr">${sellerBlock(inv.vat, dz, sSnap)}<div class="title"><div class="big">CREDIT MEMO</div></div></div>
    <div class="serial">${cn.no ? `Credit Memo No. ${cn.no}` : '<span class="draftmark">DRAFT, FOR APPROVAL</span>'}</div>
    <div class="row2"><div class="cb"><b>Reference Invoice No. ${inv.no}</b><br>dated ${dDate(inv.issuedAt)}</div><div class="datebox"><div>Date:</div><div>${dDate(cn.at)}</div></div></div>
-   <div class="box sold"><div class="h">ISSUED TO:</div><div class="b"><span>Registered Name</span><span>: ${esc(b.name)}</span><span>TIN</span><span>: ${esc(tinTxt(b))}</span><span>Business Address</span><span>: ${esc(b.address)}</span></div></div>
+   <div class="box sold"><div class="h">ISSUED TO:</div><div class="b"><span>Registered Name</span><span>: ${esc(b.name || "Valued Customer")}</span><span>TIN</span><span>: ${esc(tinTxt(b))}</span><span>Business Address</span><span>: ${esc(b.address || "—")}</span></div></div>
    <table class="it"><thead><tr><th style="width:62%">Reason / Item Description</th><th>Tax treatment</th><th>Amount</th></tr></thead><tbody>${rows.join("")}</tbody></table>
    ${cn.note ? `<div class="remarks"><b>Details:</b> ${esc(cn.note)}</div>` : ""}${isFX(inv) ? `<div class="remarks"><b>${esc(fxNote(inv, c).replace("total amount due", "total amount credited"))} (the reference invoice's rate)</b></div>` : ""}
    <div class="bottom"><div>${bx(lb)}${inv.vat ? "" : `<div class="notvalid">“THIS DOCUMENT IS<br>NOT VALID FOR CLAIM<br>OF INPUT TAX.”</div>`}${qrDoc(cn, "CM", "Scan to verify this credit memo")}</div><div>${bx(rb)}</div></div>
    <div class="signoff"><div><div class="sl"><b>${esc(cn.preparedBy ? cn.preparedBy.name : "")}</b>Prepared by${cn.preparedBy ? `, ${esc(cn.preparedBy.role)}` : ""}<br>${cn.preparedAt ? fmtDate(cn.preparedAt) : ""}</div></div>
     <div><div class="sl"><b>${cn.approvedBy ? esc(cn.approvedBy.name) : "&nbsp;"}</b>Approved by${cn.approvedBy ? `, ${esc(cn.approvedBy.role)}` : " (pending)"}<br>${cn.approvedAt ? fmtDate(cn.approvedAt) : ""}</div></div>
     <div><div class="sl"><b>&nbsp;</b>Received by (buyer)<br>Signature over printed name and date</div></div></div>
-   <div class="ptiline">Issued under PTI Electronic Invoice No. ${esc((cn.seller || sellerSnap(inv.branch)).ptiNo)}, ${esc((cn.seller || sellerSnap(inv.branch)).branch)}</div>
-   ${footer((cn.seller || sellerSnap(inv.branch)).cn, cn.seller || sellerSnap(inv.branch))}</div></article></div>
+   <div class="ptiline">Issued under PTI Electronic Invoice No. ${esc(sSnap.ptiNo || "")}, ${esc(sSnap.branch || "")}</div>
+   ${footer(sSnap.cn, sSnap)}</div></article></div>
   <p class="fmtline noprint">Credit memo layout mirrors the referenced invoice (RMC 77-2024 Annex A1 style). No BIR sample format exists for credit memos yet.</p>`;
 }
 function docReceipt(r) {
@@ -2741,6 +2790,7 @@ function renderCore() {
    <div class="due" style="margin-top:6px;font-size:12px">Database: <span style="color:${isDbConnected ? "var(--good, #12B76A)" : "#98A2B3"}">●</span> ${isDbConnected ? "Aiven MySQL 8.4" : "Local session"}</div>
    ${can("counter") ? `<button class="btn" style="margin-top:8px;width:100%" data-act="kmode">Switch to cashier counter</button>` : ""}<button class="btn link" data-act="signout">Sign out</button>`;
   renderCoBox();
+  updatePhClock();
 
   const hBr = document.getElementById("headerBranchBox");
   if (hBr) {
@@ -3623,27 +3673,27 @@ function buildJson(i) {
   };
 }
 function cnJson(cn) {
-  const inv = invOf(cn.invNo),
+  const inv = invOf(cn && cn.invNo),
     c = cnCalc(cn),
-    p = (v) => (v / 100).toFixed(2);
+    p = (v) => ((v || 0) / 100).toFixed(2);
   return {
     SpecVersion: "2.01",
-    EisUniqueId: cn.eisId,
+    EisUniqueId: (cn && cn.eisId) || null,
     DocumentType: "CREDIT_MEMO",
-    CreditMemoNo: String(cn.no),
-    IssueDateTime: new Date(cn.at).toISOString(),
-    ReferenceInvoiceNo: String(inv.no),
-    ReferenceEisUniqueId: inv.eisId,
-    Reason: cn.reason,
-    PtiElectronicInvoiceNo: (cn.seller || S).ptiNo,
-    PreparedBy: cn.preparedBy ? cn.preparedBy.name : null,
-    PreparedAt: cn.preparedAt ? new Date(cn.preparedAt).toISOString() : null,
-    ApprovedBy: cn.approvedBy ? cn.approvedBy.name : null,
-    ApprovedAt: cn.approvedAt ? new Date(cn.approvedAt).toISOString() : null,
-    Lines: cn.lines.map((l) => ({
-      Description: inv.items[l.src].desc,
-      TaxType: inv.items[l.src].tax,
-      Amount: p(l.amount),
+    CreditMemoNo: String((cn && cn.no) || ""),
+    IssueDateTime: cn && cn.at ? new Date(cn.at).toISOString() : new Date().toISOString(),
+    ReferenceInvoiceNo: String((inv && inv.no) || (cn && cn.invNo) || ""),
+    ReferenceEisUniqueId: (inv && inv.eisId) || null,
+    Reason: (cn && cn.reason) || "",
+    PtiElectronicInvoiceNo: ((cn && cn.seller) || S).ptiNo,
+    PreparedBy: cn && cn.preparedBy ? cn.preparedBy.name : null,
+    PreparedAt: cn && cn.preparedAt ? new Date(cn.preparedAt).toISOString() : null,
+    ApprovedBy: cn && cn.approvedBy ? cn.approvedBy.name : null,
+    ApprovedAt: cn && cn.approvedAt ? new Date(cn.approvedAt).toISOString() : null,
+    Lines: ((cn && cn.lines) || []).map((l) => ({
+      Description: (inv && inv.items && inv.items[l.src] && inv.items[l.src].desc) || "Credit adjustment",
+      TaxType: (inv && inv.items && inv.items[l.src] && inv.items[l.src].tax) || "VATABLE",
+      Amount: p((l && l.amount) || 0),
     })),
     VatableSales: p(c.vatable),
     VatAmount: p(c.vatShown),
@@ -3691,20 +3741,21 @@ function vCredits() {
   }`;
 }
 function vCredit() {
-  const x = credits.find((c) => c.no === current),
-    inv = invOf(x.invNo),
+  const x = credits.find((c) => c.no === current);
+  if (!x) return `<div class="head"><h1>Credit memo not found</h1><button class="btn" data-go="credits">Back to credit memos</button></div>`;
+  const inv = invOf(x.invNo),
     re = invoices.find((i) => i.refs && i.refs.cancelledBy === x.no);
   return `<div class="head noprint"><div><h1>Credit Memo No. ${x.no}</h1><p class="sub">${esc(x.reason)}, issued ${fmtDate(x.at)}</p></div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-go="credits">Back to credit memos</button><button class="btn" data-open="${inv.no}">View Invoice No. ${inv.no}</button><button class="btn" data-act="print">Print</button></div></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-go="credits">Back to credit memos</button>${inv ? `<button class="btn" data-open="${inv.no}">View Invoice No. ${inv.no}</button>` : ""}<button class="btn" data-act="print">Print</button></div></div>
   <div class="grid2"><div>${docCredit(x)}</div><div class="stack noprint">
-   <div class="panel"><h2>Trace</h2><ul class="dl"><li>Reduces <button class="btn link" data-open="${inv.no}">Invoice No. ${inv.no}</button><br><span class="due">Original invoice amount ${peso(calc(inv).due)}; after credit memos ${peso(calc(inv).due - creditTotal(inv.no))}</span></li>
+   <div class="panel"><h2>Trace</h2><ul class="dl"><li>Reduces ${inv ? `<button class="btn link" data-open="${inv.no}">Invoice No. ${inv.no}</button><br><span class="due">Original invoice amount ${peso(calc(inv).due)}; after credit memos ${peso(calc(inv).due - creditTotal(inv.no))}</span>` : `Invoice No. ${x.invNo}`}</li>
     ${re ? `<li>Replaced by <button class="btn link" data-open="${re.no}">Invoice No. ${re.no}</button></li>` : ""}</ul>
     ${x.reason === "Cancellation of invoice" && !re && me().roleCode !== "AUDITOR" ? `<button class="btn primary" data-act="reissuenow" data-cn="${x.no}">Issue replacement invoice</button>` : ""}</div>
    <div class="panel"><h2>Send to buyer</h2>
     ${(x.deliveries || []).length ? `<ul class="dl">${x.deliveries.map((d) => `<li><b>${d.via}</b>, ${esc(d.to)}<br><span class="due">${fmtDate(d.at)}</span></li>`).join("")}</ul>` : `<p class="due" style="margin:0 0 10px">Not yet sent. The buyer should be informed so a VAT-registered buyer reduces its input VAT.</p>`}
     ${
       me().roleCode !== "AUDITOR"
-        ? `<div class="row3"><div><label for="cem">Buyer email</label><input id="cem" type="email" value="${esc((cust(inv.customerId) || {}).email || "")}"></div><button class="btn" data-act="cnemail" data-cn="${x.no}">Email credit memo</button></div>
+        ? `<div class="row3"><div><label for="cem">Buyer email</label><input id="cem" type="email" value="${esc(((inv && cust(inv.customerId)) || {}).email || "")}"></div><button class="btn" data-act="cnemail" data-cn="${x.no}">Email credit memo</button></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn" data-act="cnlink" data-cn="${x.no}">Copy online view link</button><button class="btn" data-act="cnack" data-cn="${x.no}">Buyer signed printed copy</button></div>
     <p class="hint">Delivery by email or online view serves as the buyer's notice for the electronic memo; a signed "Received by" line serves for a printed copy.</p>`
         : `<p class="hint">Auditor inspection mode: delivery audit history is shown above.</p>`
@@ -3970,7 +4021,7 @@ function issueCreditOld() {
     lines: o.lines,
     eisId: eisId(t),
     designV: curDesign().v,
-    seller: Object.assign(sellerSnap(), { vat: invOf(draftC.invNo).vat }),
+    seller: Object.assign(sellerSnap(), { vat: (invOf(draftC.invNo) || {}).vat ?? true }),
   };
   credits.push(cn);
   draftC = null;
@@ -7468,12 +7519,11 @@ function signOut(reason) {
   render();
   if (reason === "timeout") toast("Signed out after inactivity");
 }
+updatePhClock();
 setInterval(() => {
   if (me() && Date.now() - lastActivity > IDLE_MIN * 60e3) signOut("timeout");
-  document
-    .querySelectorAll("[data-phclock]")
-    .forEach((el) => (el.textContent = phNow()));
-}, 30e3);
+  updatePhClock();
+}, 1000);
 
 /* ================= Users and security page ================= */
 function vUsers() {
@@ -8800,22 +8850,23 @@ function acctBuild(f) {
     if (src) e.srcs.add(src);
   };
   invoices.forEach((inv) => {
+    if (!inv) return;
     const iso = inv.txnDate || isoOf(inv.issuedAt);
     if (!inR(iso) || !brOk(inv.branch)) return;
     const c = calc(inv),
       P = (x) => toPHP(inv, x || 0),
-      br = inv.branch;
-    const salesV = c.netOfVat - c.zero - c.exempt - (c.sspt || 0),
+      br = inv.branch || "00000";
+    const salesV = (c.netOfVat || 0) - (c.zero || 0) - (c.exempt || 0) - (c.sspt || 0),
       dr = {
-        [inv.salesType === "CASH" ? "CASH" : "AR"]: P(c.due),
-        CWT: P(c.wht),
-        DISC_ST: P(c.disc),
+        [inv.salesType === "CASH" ? "CASH" : "AR"]: P(c.due || 0),
+        CWT: P(c.wht || 0),
+        DISC_ST: P(c.disc || 0),
       },
       cr = {
         OVAT: P(c.addVat || 0),
         SALES_V: P(salesV),
-        SALES_Z: P(c.zero),
-        SALES_E: P(c.exempt),
+        SALES_Z: P(c.zero || 0),
+        SALES_E: P(c.exempt || 0),
         SALES_P: P(c.sspt || 0),
       };
     const diff =
@@ -8833,15 +8884,16 @@ function acctBuild(f) {
     );
   });
   credits.forEach((cn) => {
+    if (!cn) return;
     const inv = invOf(cn.invNo),
       iso = isoOf(cn.at),
       c = cnCalc(cn),
       P = (x) => toPHP(inv, x || 0),
-      br = inv.branch;
-    const dr = { RET: P(c.netOfVat - c.disc), OVAT: P(c.addVat || 0) },
+      br = (inv && inv.branch) || (cn && cn.branch) || (BRS[0] && BRS[0].code) || "00000";
+    const dr = { RET: P((c.netOfVat || 0) - (c.disc || 0)), OVAT: P(c.addVat || 0) },
       cr = {
-        [inv.salesType === "CASH" ? "CASH" : "AR"]: P(c.due),
-        CWT: P(c.wht),
+        [(inv && inv.salesType === "CASH") ? "CASH" : "AR"]: P(c.due || 0),
+        CWT: P(c.wht || 0),
       };
     dr.RET += Object.values(cr).reduce((a, x) => a + x, 0) - dr.RET - dr.OVAT;
     Object.entries(dr).forEach(([k, v]) =>
@@ -8852,11 +8904,12 @@ function acctBuild(f) {
     );
   });
   receipts.forEach((r) => {
+    if (!r) return;
     const iso = isoOf(r.at),
       br = r.branch || "00000";
     if (r.type === "COLLECTION") {
-      const cash = isFX(r) ? Math.round(r.amount * r.fx.rate) : r.amount,
-        ar = r.lines.reduce((a, l) => a + toPHP(invOf(l.invNo), l.amount), 0),
+      const cash = isFX(r) ? Math.round(r.amount * ((r.fx && r.fx.rate) || 1)) : r.amount,
+        ar = (r.lines || []).reduce((a, l) => a + toPHP(invOf(l && l.invNo), (l && l.amount) || 0), 0),
         fx = cash - ar;
       post(iso, br, "CASH", cash, 0, `CR ${r.no}`);
       post(iso, br, "AR", 0, ar, `CR ${r.no}`);
@@ -12087,6 +12140,7 @@ tally = [
 [...invoices, ...receipts].forEach((x) => (x.buyer = snap(x.customerId)));
 if (location.hash === "#portal") portalOpen = true;
 render();
+updatePhClock();
 initSigning().then(async () => {
   for (const i of invoices) {
     if (!i.sig || !i.verifyUrl) await signDoc(i, "INV");
@@ -12141,13 +12195,32 @@ async function syncWithDb() {
           console.warn("Skipping malformed invoice records without valid items:", invalidInvoices);
         }
         if (validInvoices.length > 0) {
-          invoices = validInvoices;
-        } else if (invalidInvoices.length > 0) {
-          toast("Warning: Synced invoices contained invalid item data and were skipped.");
+          validInvoices.forEach((inc) => {
+            const idx = invoices.findIndex((loc) => loc.no === inc.no);
+            if (idx >= 0) invoices[idx] = inc;
+            else invoices.push(inc);
+          });
+          invoices.sort((a, b) => b.issuedAt - a.issuedAt);
         }
       }
-      if (Array.isArray(data.credits) && data.credits.length > 0) credits = data.credits;
-      if (Array.isArray(data.receipts) && data.receipts.length > 0) receipts = data.receipts;
+      if (Array.isArray(data.credits) && data.credits.length > 0) {
+        data.credits.forEach((inc) => {
+          if (!inc || !inc.no) return;
+          const idx = credits.findIndex((loc) => loc.no === inc.no);
+          if (idx >= 0) credits[idx] = inc;
+          else credits.push(inc);
+        });
+        credits.sort((a, b) => (b.at || 0) - (a.at || 0));
+      }
+      if (Array.isArray(data.receipts) && data.receipts.length > 0) {
+        data.receipts.forEach((inc) => {
+          if (!inc || !inc.no) return;
+          const idx = receipts.findIndex((loc) => loc.no === inc.no);
+          if (idx >= 0) receipts[idx] = inc;
+          else receipts.push(inc);
+        });
+        receipts.sort((a, b) => (b.at || 0) - (a.at || 0));
+      }
       if (Array.isArray(data.secLog) && data.secLog.length > 0) secLog = data.secLog;
       if (data.settings && typeof data.settings === "object") {
         Object.assign(S, data.settings);
