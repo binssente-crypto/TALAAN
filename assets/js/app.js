@@ -1791,6 +1791,10 @@ function checks(inv) {
       inv.no >= sr[0] && inv.no <= sr[1],
       `Invoice no. within ${brOf(inv.branch).name} series ${sr[0]}–${sr[1]}`,
     ]);
+    out.push([
+      !invoices.some((x) => x.no === inv.no && x !== inv),
+      "Invoice number is not already assigned to an issued invoice",
+    ]);
   }
   out.push([
     inv.items.length > 0 && inv.items.every((i) => i.desc.trim()),
@@ -2153,6 +2157,29 @@ function unb64u(s) {
 }
 async function initSigning() {
   try {
+    if (typeof localStorage !== "undefined") {
+      const storedPriv = localStorage.getItem("talaan_priv_jwk");
+      const storedPub = localStorage.getItem("talaan_pub_jwk");
+      if (storedPriv && storedPub) {
+        SIGN.priv = await crypto.subtle.importKey(
+          "jwk",
+          JSON.parse(storedPriv),
+          { name: "ECDSA", namedCurve: "P-256" },
+          true,
+          ["sign"],
+        );
+        SIGN.pub = await crypto.subtle.importKey(
+          "jwk",
+          JSON.parse(storedPub),
+          { name: "ECDSA", namedCurve: "P-256" },
+          true,
+          ["verify"],
+        );
+        SIGN.pubJwk = JSON.parse(storedPub);
+        SIGN.ready = true;
+        return;
+      }
+    }
     const k = await crypto.subtle.generateKey(
       { name: "ECDSA", namedCurve: "P-256" },
       true,
@@ -2161,6 +2188,11 @@ async function initSigning() {
     SIGN.priv = k.privateKey;
     SIGN.pub = k.publicKey;
     SIGN.pubJwk = await crypto.subtle.exportKey("jwk", k.publicKey);
+    const privJwk = await crypto.subtle.exportKey("jwk", k.privateKey);
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("talaan_priv_jwk", JSON.stringify(privJwk));
+      localStorage.setItem("talaan_pub_jwk", JSON.stringify(SIGN.pubJwk));
+    }
     SIGN.ready = true;
   } catch (e) {
     SIGN.ready = false;
@@ -2970,6 +3002,12 @@ function refreshEditor() {
   }
 }
 function issue() {
+  if (draft) {
+    const b = brOf(draft.branch);
+    if (b && draft.no < b.next.inv) {
+      draft.no = b.next.inv;
+    }
+  }
   if (!checks(draft).every((x) => x[0])) return;
   const d = draft,
     t = now();
@@ -11595,8 +11633,12 @@ tally = [
 if (location.hash === "#portal") portalOpen = true;
 render();
 initSigning().then(async () => {
-  for (const i of invoices) await signDoc(i, "INV");
-  for (const c of credits) await signDoc(c, "CM");
+  for (const i of invoices) {
+    if (!i.sig || !i.verifyUrl) await signDoc(i, "INV");
+  }
+  for (const c of credits) {
+    if (!c.sig || !c.verifyUrl) await signDoc(c, "CM");
+  }
   render();
 });
 async function syncWithDb() {
@@ -11629,6 +11671,9 @@ async function syncWithDb() {
           if (brInvs.length > 0) {
             b.next.inv = Math.max(...brInvs.map((i) => i.no)) + 1;
           }
+          if (draft && draft.branch === b.code) {
+            draft.no = b.next.inv;
+          }
           const brCns = credits.filter(
             (c) =>
               (c.branch ||
@@ -11646,8 +11691,12 @@ async function syncWithDb() {
           }
         });
         if (!SIGN.ready) await initSigning();
-        for (const i of invoices) await signDoc(i, "INV");
-        for (const c of credits) await signDoc(c, "CM");
+        for (const i of invoices) {
+          if (!i.sig || !i.verifyUrl) await signDoc(i, "INV");
+        }
+        for (const c of credits) {
+          if (!c.sig || !c.verifyUrl) await signDoc(c, "CM");
+        }
       } else {
         postDbSync("seed_all", { invoices, credits, receipts, settings: S });
       }
