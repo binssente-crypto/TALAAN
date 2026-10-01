@@ -533,7 +533,16 @@ function go(v,no){if(VIEW_PERM[v]&&!need(VIEW_PERM[v]))return;if(["new","newRece
 function render(){renderCore();renderHelp()}
 function renderCore(){
   const navEl=document.querySelector("nav.side");
-  if(!me()){navEl.style.display="none";document.getElementById("main").innerHTML=portalOpen?vPortal():vLogin();renderQRs();const hr=document.getElementById("helpRoot");if(hr)hr.innerHTML="";return}
+  const appEl=document.querySelector(".app");
+  if(!me()){
+    navEl.style.display="none";
+    if(appEl)appEl.classList.add("auth-mode");
+    document.getElementById("main").innerHTML=portalOpen?vPortal():vLogin();
+    renderQRs();
+    const hr=document.getElementById("helpRoot");if(hr)hr.innerHTML="";
+    return;
+  }
+  if(appEl)appEl.classList.remove("auth-mode");
   document.querySelector(".app").classList.toggle("counter-mode",uiMode==="counter");
   if(uiMode==="counter"){navEl.style.display="none";document.getElementById("main").innerHTML=vCounter();renderQRs();return}
   navEl.style.display="";
@@ -1554,7 +1563,7 @@ function portalReview(){const pend=portalSubs.filter(x=>x.status==="PENDING"),ur
   ${pend.length?`<h2>Waiting for review (${pend.length})</h2><div class="tablewrap" style="margin-bottom:16px"><table style="min-width:860px"><thead><tr><th>Ref.</th><th>Received</th><th>Registered name</th><th>TIN or country</th><th>Email</th><th>2303</th><th></th></tr></thead><tbody>${pend.map(x=>`<tr><td>${x.id}</td><td>${fmtDate(x.at)}</td><td style="white-space:normal"><strong>${esc(x.name)}</strong>${x.trade?`<br><span class="due">${esc(x.trade)}</span>`:""}<br><span class="due">${esc(x.address)}</span></td><td>${esc(x.vatStatus==="FOREIGN"?x.country:x.tin||"none")}</td><td>${esc(x.email)}</td><td>${x.file?`${esc(x.file.name)}`:"<span class=\"due\">not uploaded</span>"}</td>
     <td>${mgr?`<button class="btn link" data-act="psok" data-id="${x.id}">Approve</button> <button class="btn link" data-act="psno" data-id="${x.id}">Reject</button>`:""}</td></tr>`).join("")}</tbody></table></div>`:""}`}
 function vLogin(){const a=auth;
-  const demo=`<div class="demoacc"><b>Demo accounts</b> (prototype only)<table><thead><tr><th>Username</th><th>Password</th><th>Role</th></tr></thead><tbody>${USERS.filter(u=>u.active).map(u=>`<tr><td>${esc(u.username)}</td><td>${u.mustChange?"Temp#1234":esc(u.pw)}</td><td>${esc(ROLES[u.roleCode].label)}${u.mfa?", 2FA":""}</td></tr>`).join("")}</tbody></table></div>`;
+  const demo=`<div class="demoacc"><div class="demoacc-title"><span><b>Demo accounts</b> (click to autofill)</span><span class="demoacc-badge">Prototype</span></div><div class="demoacc-tablewrap"><table><thead><tr><th>Username</th><th>Password</th><th>Role</th></tr></thead><tbody>${USERS.filter(u=>u.active).map(u=>`<tr data-quick-user="${esc(u.username)}" data-quick-pass="${u.mustChange?"Temp#1234":esc(u.pw)}" title="Click to autofill ${esc(u.username)}"><td><code>${esc(u.username)}</code></td><td><code>${u.mustChange?"Temp#1234":esc(u.pw)}</code></td><td><span class="role-badge">${esc(ROLES[u.roleCode].label)}${u.mfa?", 2FA":""}</span></td></tr>`).join("")}</tbody></table></div></div>`;
   if(a.step==="mfa"){const u=USERS.find(x=>x.id===a.uid);return `<div class="login"><h1>Two-factor sign-in</h1><p class="sub">Enter the 6-digit code from ${esc(u.name)}'s authenticator app.</p>
     <label for="mfa" style="margin-top:16px">Verification code</label><input id="mfa" inputmode="numeric" autocomplete="one-time-code" maxlength="6" data-auth="code">
     <div class="err">${esc(a.err)}</div><div style="display:flex;gap:8px;margin-top:12px"><button class="btn primary" data-act="mfaok">Verify</button><button class="btn" data-act="authcancel">Cancel</button></div>
@@ -1562,11 +1571,11 @@ function vLogin(){const a=auth;
   if(a.step==="change"){return `<div class="login"><h1>Set a new password</h1><p class="sub">Your password was reset by the administrator. Choose a new one.</p>
     <label for="np1" style="margin-top:16px">New password</label><input id="np1" type="password" data-auth="np1"><label for="np2" style="margin-top:10px">Repeat new password</label><input id="np2" type="password" data-auth="np2">
     <p class="hint">At least 10 characters, with upper and lower case, a number and a symbol.</p><div class="err">${esc(a.err)}</div><button class="btn primary" data-act="pwchange">Save and continue</button></div>`}
-  return `<div class="login"><img src="${BIZ_LOGO}" alt="" style="width:72px;height:72px;object-fit:contain;display:block;margin-bottom:10px"><h1>Sign in to Talaan</h1><p class="sub">${esc(S.name)}</p>
-   <label for="un" style="margin-top:16px">Username</label><input id="un" autocomplete="username" data-auth="username" value="${esc(a.username)}">
-   <label for="pw" style="margin-top:10px">Password</label><input id="pw" type="password" autocomplete="current-password" data-auth="password">
-   <div class="err">${esc(a.err)}</div><button class="btn primary" style="margin-top:12px;width:100%" data-act="signin">Sign in</button>
-   <p style="margin:12px 0 0"><button class="btn link" data-act="openportal">Are you a client? Fill in your information for invoicing</button></p><p class="hint">Accounts lock for ${LOCK_MIN} minutes after ${MAX_FAIL} failed attempts. Sessions end after ${IDLE_MIN} minutes without activity.</p>${demo}</div>`}
+  return `<div class="login"><div class="login-header"><img src="${BIZ_LOGO}" alt="Logo" class="login-logo"><h1>Sign in to Talaan</h1><p class="sub">${esc(S.name)}</p></div>
+   <label for="un">Username</label><input id="un" autocomplete="username" data-auth="username" value="${esc(a.username)}" placeholder="e.g. msantos">
+   <label for="pw">Password</label><input id="pw" type="password" autocomplete="current-password" data-auth="password" placeholder="••••••••">
+   <div class="err">${esc(a.err)}</div><button class="btn primary" data-act="signin">Sign in</button>
+   <p style="text-align:center;margin:16px 0 0"><button class="btn link" data-act="openportal">Are you a client? Fill in your information for invoicing</button></p><p class="hint" style="text-align:center">Accounts lock for ${LOCK_MIN} minutes after ${MAX_FAIL} failed attempts. Sessions end after ${IDLE_MIN} minutes without activity.</p>${demo}</div>`}
 function pwStrong(p){return p.length>=10&&/[a-z]/.test(p)&&/[A-Z]/.test(p)&&/\d/.test(p)&&/[^A-Za-z0-9]/.test(p)}
 function finishLogin(u){userId=u.id;uiMode=u.roleCode==="CASHIER"?"counter":"full";if(uiMode==="counter")setTimeout(()=>{kNew();render()},0);viewBr=u.branch==="ALL"?"00000":u.branch;u.failed=0;u.lastLogin=now();lastActivity=Date.now();auth={step:"login",uid:null,code:null,codeTries:0,err:"",username:""};slog("Signed in",`${ROLES[u.roleCode].label}${u.mfa?", two-factor verified":""}`,u);view="list";current=null;render();toast(`Welcome, ${u.name}`)}
 function doSignin(){const un=(auth.username||"").trim().toLowerCase(),pw=auth.password||"",u=USERS.find(x=>x.username===un);auth.password="";
@@ -1946,6 +1955,17 @@ function deliver(no,via,to){invOf(no).deliveries.push({via,to,at:now()});render(
 function toast(msg){const t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("show"),2800)}
 
 document.addEventListener("click",e=>{lastActivity=Date.now();
+  const qRow=e.target.closest("[data-quick-user]");
+  if(qRow){
+    auth.username=qRow.dataset.quickUser;
+    auth.password=qRow.dataset.quickPass;
+    render();
+    const un=document.getElementById("un"),pw=document.getElementById("pw");
+    if(un)un.value=auth.username;
+    if(pw)pw.value=auth.password;
+    toast(`Autofilled ${auth.username}`);
+    return;
+  }
   const aa=e.target.closest("[data-act]");
   if(!me()){if(!aa)return;const act=aa.dataset.act;
     if(act==="signin")doSignin();
