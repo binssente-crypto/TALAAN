@@ -88,10 +88,8 @@ select {
   grid-template-columns: 240px 1fr;
   min-height: 100vh;
 }
-.app.auth-mode,
-.app:has(.login),
-.app:has(nav.side[style*="display: none"]) {
-  display: flex !important;
+.app.auth-mode {
+  display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
@@ -104,9 +102,7 @@ select {
   );
   padding: 24px 16px;
 }
-.app.auth-mode main,
-.app:has(.login) main,
-.app:has(nav.side[style*="display: none"]) main {
+.app.auth-mode main {
   max-width: 540px;
   width: 100%;
   padding: 0;
