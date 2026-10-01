@@ -826,6 +826,7 @@ function viewedRail(v, c) {
     <div class="minor"><span>Issued</span><b>${timeOf(v.at)}</b></div></div>
    <button class="issue" data-act="next">Next customer</button>
    <div class="card" style="display:flex;flex-direction:column;gap:8px"><button class="btn" data-act="print">Print copy for buyer</button>
+    <button class="btn" data-act="download-pdf"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download PDF</button>
     <button class="btn" data-act="email"${v.buyer.email ? "" : " disabled"}>Email to ${v.buyer.email ? esc(v.buyer.email) : "buyer (no email on file)"}</button>
     <button class="btn" data-act="qrshown">Buyer scanned the QR code</button><button class="btn" data-act="correct">Request correction or void</button></div>
    ${v.sent && v.sent.length ? `<div class="card limits">${v.sent.map((s) => `Sent by ${esc(s)}`).join("<br>")}</div>` : ""}
@@ -1178,6 +1179,37 @@ document.addEventListener("click", (e) => {
     if (f) f.focus();
   }
   if (act === "print") window.print();
+  if (act === "download-pdf") {
+    const inv = view;
+    if (!inv) return;
+    const paper = document.querySelector(".paper");
+    if (!paper) {
+      window.print();
+      return;
+    }
+    const filename = `Invoice-${inv.no}.pdf`;
+    toast("Generating invoice PDF...");
+    if (typeof html2pdf !== "undefined") {
+      const opt = {
+        margin: [8, 8, 8, 8],
+        filename: filename,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, letterRendering: true, logging: false },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+        pagebreak: { mode: ["avoid-all", "css", "legacy"] },
+      };
+      const worker = html2pdf().set(opt).from(paper);
+      worker
+        .save()
+        .then(() => toast(`Downloaded ${filename}`))
+        .catch(() => {
+          document.querySelectorAll(".html2pdf__container").forEach((el) => el.remove());
+          window.print();
+        });
+      return;
+    }
+    window.print();
+  }
   if ((act === "email" || act === "qrshown") && view) {
     const d = db.invoices.find((i) => i.no === view.no);
     d.sent.push(

@@ -144,6 +144,9 @@ module.exports = async function handler(req, res) {
       const [setRows] = await p.query(
         "SELECT config FROM system_settings WHERE id = 'main'",
       );
+      const [custRows] = await p.query(
+        "SELECT config FROM system_settings WHERE id = 'customers'",
+      );
 
       return res.status(200).json({
         ok: true,
@@ -162,6 +165,11 @@ module.exports = async function handler(req, res) {
           ? typeof setRows[0].config === "string"
             ? JSON.parse(setRows[0].config)
             : setRows[0].config
+          : null,
+        customers: custRows.length
+          ? typeof custRows[0].config === "string"
+            ? JSON.parse(custRows[0].config)
+            : custRows[0].config
           : null,
       });
     }
@@ -256,6 +264,16 @@ module.exports = async function handler(req, res) {
           [JSON.stringify(data)],
         );
         return res.status(200).json({ ok: true, updated: "settings" });
+      }
+
+      if (action === "save_customers" && data) {
+        await p.query(
+          `INSERT INTO system_settings (id, config)
+           VALUES ('customers', ?)
+           ON DUPLICATE KEY UPDATE config = VALUES(config)`,
+          [JSON.stringify(data)],
+        );
+        return res.status(200).json({ ok: true, updated: "customers" });
       }
 
       if (action === "seed_all" && data) {

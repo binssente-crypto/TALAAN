@@ -101,8 +101,9 @@ select {
 .header-left {
   display: flex;
   align-items: center;
-  gap: 14px;
-  min-width: 0;
+  width: calc(var(--sidebar-w, 260px) - 18px);
+  flex-shrink: 0;
+  transition: width 0.2s ease;
 }
 .header-brand {
   display: flex;
@@ -125,24 +126,21 @@ select {
   border-radius: 4px;
   letter-spacing: 0.05em;
 }
-.header-company {
-  font-size: 12px;
-  color: var(--muted);
-  white-space: nowrap;
+body.sidebar-collapsed .header-left,
+body:has(.app.sidebar-collapsed) .header-left {
+  width: var(--rail-w, 68px);
   overflow: hidden;
-  text-overflow: ellipsis;
-  border-left: 1px solid var(--line);
-  padding-left: 12px;
+  white-space: nowrap;
 }
-.header-company b {
-  color: var(--ink);
+body.sidebar-collapsed .header-brand .header-tag,
+body:has(.app.sidebar-collapsed) .header-brand .header-tag {
+  display: none;
 }
-
-.header-center {
+.header-time-wrap {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
+  flex: 1;
+  min-width: 0;
 }
 .ph-clock-badge {
   display: inline-flex;
@@ -163,26 +161,6 @@ select {
   font-weight: 600;
   color: var(--muted);
   font-size: 11px;
-}
-.header-db-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--soft);
-  padding: 4px 10px;
-  border-radius: 20px;
-  font-size: 12px;
-  border: 1px solid var(--line);
-  color: var(--muted);
-}
-.db-dot {
-  font-size: 11px;
-}
-.db-dot.connected {
-  color: var(--ok, #12B76A);
-}
-.db-dot.local {
-  color: #98A2B3;
 }
 
 .header-right {
@@ -303,7 +281,7 @@ select {
 
 .app {
   display: grid;
-  grid-template-columns: 240px 1fr;
+  grid-template-columns: var(--sidebar-w, 260px) 1fr;
   min-height: calc(100vh - 58px);
 }
 .app.auth-mode {
@@ -2426,6 +2404,9 @@ pre {
   .app.sidebar-collapsed .userbox,
   .app.sidebar-collapsed .nav-label {
     display: block !important;
+  }
+  .app.sidebar-collapsed .co-badge-box {
+    display: flex !important;
   }
   .app.sidebar-collapsed .side-head {
     justify-content: space-between !important;

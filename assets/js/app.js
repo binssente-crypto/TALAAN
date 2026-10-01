@@ -2,7 +2,10 @@
 try {
   if (localStorage.getItem("sidebar_collapsed") === "1") {
     const appEl = document.querySelector(".app");
-    if (appEl) appEl.classList.add("sidebar-collapsed");
+    if (appEl) {
+      appEl.classList.add("sidebar-collapsed");
+      document.body.classList.add("sidebar-collapsed");
+    }
   }
 } catch (e) {}
 
@@ -45,6 +48,7 @@ document.addEventListener("click", (e) => {
     const appEl = document.querySelector(".app");
     if (appEl) {
       const wasCollapsed = appEl.classList.toggle("sidebar-collapsed");
+      document.body.classList.toggle("sidebar-collapsed", wasCollapsed);
       const btn = document.getElementById("sidebarToggleBtn");
       if (btn) btn.title = wasCollapsed ? "Expand sidebar" : "Collapse sidebar";
       try {
@@ -233,10 +237,10 @@ const CUSTOMERS = [
   },
 ];
 const VS_LABEL = {
-  VAT: "VAT-registered",
   NONVAT: "Non-VAT registered",
-  INDIVIDUAL: "Individual or end consumer (B2C)",
-  FOREIGN: "Foreign buyer (no Philippine TIN)",
+  VAT: "VAT-registered",
+  INDIVIDUAL: "Individual B2C",
+  FOREIGN: "Foreign",
 };
 function tinTxt(b) {
   return b && b.vatStatus === "FOREIGN"
@@ -280,6 +284,54 @@ CUSTOMERS.push({
   country: "Singapore",
   foreignTaxId: "UEN 201812345K",
 });
+const SEED_CUSTOMER_IDS = new Set(["cw", "c1", "c2", "c3", "c4", "c5", "c6", "c7"]);
+const SEED_CUSTOMER_TINS = new Set([
+  "98765432100000",
+  "23456789000001",
+  "34567890100000",
+  "45678901200000",
+  "56789012",
+]);
+CUSTOMERS.forEach((c) => (c._isSeed = true));
+
+function loadCustomersJson() {
+  if (typeof localStorage === "undefined") return;
+  try {
+    const raw = localStorage.getItem("talaan_customers_json");
+    if (!raw) return;
+    const list = JSON.parse(raw);
+    if (!Array.isArray(list)) return;
+    list.forEach((c) => {
+      if (!c || !c.name) return;
+      const idx = CUSTOMERS.findIndex(
+        (x) => x.id === c.id || (c.tin && x.tin && x.tin.replace(/\D/g, "") === c.tin.replace(/\D/g, "")),
+      );
+      if (idx >= 0) {
+        CUSTOMERS[idx]._persisted = true;
+        Object.assign(CUSTOMERS[idx], c);
+        CUSTOMERS[idx]._persisted = true;
+      } else {
+        c._persisted = true;
+        CUSTOMERS.push(c);
+      }
+    });
+  } catch (e) {
+    console.warn("Failed to load customers from JSON:", e);
+  }
+}
+
+function saveCustomersJson() {
+  CUSTOMERS.forEach((c) => (c._persisted = true));
+  if (typeof localStorage !== "undefined") {
+    try {
+      localStorage.setItem("talaan_customers_json", JSON.stringify(CUSTOMERS));
+    } catch (e) {
+      console.warn("Failed to save customers to localStorage:", e);
+    }
+  }
+  postDbSync("save_customers", CUSTOMERS);
+}
+loadCustomersJson();
 const TAX_VAT = {
   VATABLE: "VATable 12%",
   ZERO_RATED: "Zero-rated",
@@ -1764,7 +1816,9 @@ function collPill(inv) {
           : '<span class="pill s-draft">Unpaid</span>');
 }
 function delivered(inv) {
-  return inv.deliveries.some((d) => d.via !== "Printed copy");
+  return (inv.deliveries || []).some(
+    (d) => d.via !== "Printed copy" && d.status !== "failed" && d.status !== "sending",
+  );
 }
 function rStatus(r) {
   if (r.type === "COLLECTION")
@@ -2668,8 +2722,7 @@ function renderCore() {
    <div class="due" style="margin-top:6px;font-size:12px">Database: <span style="color:${isDbConnected ? "var(--good, #12B76A)" : "#98A2B3"}">●</span> ${isDbConnected ? "Aiven MySQL 8.4" : "Local session"}</div>
    ${can("counter") ? `<button class="btn" style="margin-top:8px;width:100%" data-act="kmode">Switch to cashier counter</button>` : ""}<button class="btn link" data-act="signout">Sign out</button>`;
   renderCoBox();
-  const hDb = document.getElementById("headerDbStatus");
-  if (hDb) hDb.innerHTML = `<span class="db-dot ${isDbConnected ? "connected" : "local"}">●</span> ${isDbConnected ? "Aiven MySQL 8.4" : "Local session"}`;
+
   const hBr = document.getElementById("headerBranchBox");
   if (hBr) {
     if (me().branch === "ALL") {
@@ -2850,7 +2903,7 @@ function vList() {
     )
     .join("")}
   </tbody></table></div>
-  <p class="note">Prototype with sample data. Nothing is sent to the BIR or to buyers.</p>`;
+  <p class="note">Prototype with sample data. BIR submission is simulated; configured buyer emails are dispatched via Brevo.</p>`;
 }
 
 /* ================= Invoice editor ================= */
@@ -3089,12 +3142,35 @@ function refreshEditor() {
     renderQRs();
   }
 }
+async function sendInvoiceEmail(inv, buyerEmail) {
+  const b = inv.buyer || cust(inv.customerId) || {};
+  const toEmail = buyerEmail || b.email || (draft && draft.buyerEmail);
+  if (!toEmail) return { ok: false, error: "No recipient email on file" };
+  try {
+    const res = await fetch("/api/send-invoice", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        invoice: inv,
+        buyer: Object.assign({}, b, { email: toEmail }),
+        seller: inv.seller || sellerSnap(inv.branch),
+      }),
+    });
+    const data = await res.json();
+    return data;
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
 function issue() {
   if (draft) {
     const b = brOf(draft.branch);
     if (b && draft.no < b.next.inv) {
       draft.no = b.next.inv;
     }
+  }
+  if (picker.adding && picker.nc && picker.nc.name && picker.nc.name.trim()) {
+    saveNc(picker.ctx || "inv");
   }
   if (!checks(draft).every((x) => x[0])) return;
   const d = draft,
@@ -3119,16 +3195,86 @@ function issue() {
   if (isFX(d)) d.fx = rateFor(curOf(d), d.txnDate || todayISO());
   d.buyer = d.buyerSnapshot || snap(d.customerId);
   delete d.buyerSnapshot;
+  if (d.buyerEmail && d.buyer && !d.buyer.email) {
+    d.buyer.email = d.buyerEmail;
+  }
+  if (d.buyer && d.buyer.name && d.buyer.name.trim() && d.customerId !== "cw") {
+    let matchedCust = CUSTOMERS.find((c) => c.id === d.customerId);
+    if (!matchedCust) {
+      matchedCust = CUSTOMERS.find(
+        (c) =>
+          c.id !== "cw" &&
+          c.name.trim().toLowerCase() === d.buyer.name.trim().toLowerCase() &&
+          (!d.buyer.tin || !c.tin || digits(c.tin) === digits(d.buyer.tin)),
+      );
+    }
+    if (matchedCust) {
+      let changed = false;
+      if (d.buyer.email && matchedCust.email !== d.buyer.email) {
+        matchedCust.email = d.buyer.email;
+        changed = true;
+      }
+      if (d.buyer.address && !matchedCust.address) {
+        matchedCust.address = d.buyer.address;
+        changed = true;
+      }
+      if (d.buyer.vatStatus && !matchedCust.vatStatus) {
+        matchedCust.vatStatus = d.buyer.vatStatus;
+        changed = true;
+      }
+      d.customerId = matchedCust.id;
+      if (changed) {
+        matchedCust.updatedAt = Date.now();
+        saveCustomersJson();
+      }
+    } else {
+      const newCustId = "c" + (CUSTOMERS.length + 1) + "_" + Date.now().toString(36);
+      const newCustomer = {
+        id: newCustId,
+        name: d.buyer.name.trim(),
+        vatStatus: d.buyer.vatStatus || "NONVAT",
+        tin: d.buyer.vatStatus === "FOREIGN" ? "" : (d.buyer.tin || "").trim(),
+        address: (d.buyer.address || "").trim(),
+        email: (d.buyer.email || d.buyerEmail || "").trim(),
+        terms: d.terms || "NET30",
+        wht: Number(d.wht || 0),
+        autoEmail: true,
+        country: (d.buyer.country || "").trim(),
+        foreignTaxId: (d.buyer.foreignTaxId || "").trim(),
+        updatedAt: Date.now(),
+      };
+      CUSTOMERS.push(newCustomer);
+      d.customerId = newCustId;
+      saveCustomersJson();
+      slog("New buyer registered on invoice issue", `${newCustomer.name} (${newCustId})`);
+    }
+  }
   d.seller = sellerSnap(d.branch);
   d.seller.vat = d.vat;
   if (d.refs.aggregate)
     tally
       .filter((t) => d.refs.aggregate.ids.includes(t.id))
       .forEach((t) => (t.invNo = d.no));
-  {
-    const cu = cust(d.customerId);
-    if (S.autoEmail && cu && cu.email && cu.autoEmail !== false)
-      d.deliveries.push({ via: "Email (automatic)", to: cu.email, at: now() });
+  const recipientEmail = (d.buyer && d.buyer.email) || d.buyerEmail;
+  const buyerOptIn = d.buyer ? d.buyer.autoEmail !== false : true;
+  if (recipientEmail && S.autoEmail && buyerOptIn) {
+    d.deliveries.push({ via: "Brevo Email", to: recipientEmail, at: now(), status: "sending" });
+    sendInvoiceEmail(d, recipientEmail)
+      .then((res) => {
+        const item = d.deliveries.find((x) => x.to === recipientEmail);
+        if (item) item.status = res.ok ? "delivered" : "failed";
+        if (res.ok) {
+          toast(`E-invoice ${d.no} issued and sent to ${recipientEmail}`);
+        } else {
+          toast(`E-invoice ${d.no} issued (email notice: ${res.error || "failed"})`);
+        }
+        render();
+      })
+      .catch((err) => {
+        const item = d.deliveries.find((x) => x.to === recipientEmail);
+        if (item) item.status = "failed";
+        render();
+      });
   }
   delete d.adv;
   draft = null;
@@ -3192,6 +3338,37 @@ function validity(inv) {
       : []),
   ];
 }
+async function downloadInvoicePdf(no) {
+  const inv = invOf(no || current);
+  if (!inv) return;
+  const paper = document.querySelector(".paper");
+  if (!paper) {
+    window.print();
+    return;
+  }
+  const filename = `Invoice-${inv.no}.pdf`;
+  toast("Generating invoice PDF...");
+
+  if (typeof html2pdf !== "undefined") {
+    const opt = {
+      margin: [8, 8, 8, 8],
+      filename: filename,
+      image: { type: "jpeg", quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true, letterRendering: true, logging: false },
+      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+      pagebreak: { mode: ["avoid-all", "css", "legacy"] },
+    };
+    try {
+      await html2pdf().set(opt).from(paper).save();
+      toast(`Downloaded ${filename}`);
+      return;
+    } catch (err) {
+      console.warn("html2pdf error, opening print dialog:", err);
+    }
+  }
+
+  window.print();
+}
 function vDetail() {
   const i = invOf(current),
     c = calc(i),
@@ -3202,7 +3379,7 @@ function vDetail() {
     (x) => x.refs.reissueOf === i.no || x.refs.addlFor === i.no,
   );
   return `<div class="head noprint"><div><h1>Invoice No. ${i.no}</h1><p class="sub">Issued ${fmtDate(i.issuedAt)}. Locked: issued e-invoices cannot be edited or deleted. Seller, buyer, design and permit details are frozen as issued.</p></div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-go="list">Back to invoices</button><button class="btn" data-act="print">Print copy for buyer</button>
+  <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-go="list">Back to invoices</button><button class="btn" data-act="print">Print copy for buyer</button><button class="btn" data-act="download-pdf"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download PDF</button>
   ${S.reporting && i.status === "pending" && me().roleCode !== "AUDITOR" ? `<button class="btn primary" data-act="send" data-no="${i.no}"${i.progress != null ? " disabled" : ""}>Transmit to BIR</button>` : ""}</div></div>
   <div class="noprint">${
     crApproved(i.no).length
@@ -4652,10 +4829,11 @@ function searchCustomers(q) {
     (c) =>
       !q ||
       c.name.toLowerCase().includes(q) ||
+      (c.email && c.email.toLowerCase().includes(q)) ||
       (dq.length >= 3 && digits(c.tin).includes(dq)),
   )
     .sort((a, b) => lastSale(b.id) - lastSale(a.id))
-    .slice(0, 6);
+    .slice(0, 8);
 }
 function hl(text, q) {
   q = q.trim();
@@ -4675,33 +4853,44 @@ function suggHtml(ctx) {
     q = picker.q.trim();
   const opts = list.map(
     (c, i) =>
-      `<div class="opt${i === picker.hi ? " hi" : ""}" role="option" id="po-${ctx}-${i}" aria-selected="${i === picker.hi}" data-pickid="${c.id}" data-ctx="${ctx}"><b>${hl(c.name, q)}</b><small>${VS_LABEL[c.vatStatus]}. TIN ${c.tin ? hl(c.tin, q) : "none"}, ${esc(c.address)}${lastSale(c.id) ? `. Last invoice ${dDate(lastSale(c.id))}` : ""}</small></div>`,
+      `<div class="opt${i === picker.hi ? " hi" : ""}" role="option" id="po-${ctx}-${i}" aria-selected="${i === picker.hi}" data-pickid="${c.id}" data-ctx="${ctx}"><b>${hl(c.name, q)}</b><small>${VS_LABEL[c.vatStatus] || c.vatStatus}. TIN ${c.tin ? hl(c.tin, q) : "none"}, ${esc(c.address)}${c.email ? ` &bull; Email: ${esc(c.email)}` : ""}${lastSale(c.id) ? `. Last invoice ${dDate(lastSale(c.id))}` : ""}</small></div>`,
   );
   opts.push(
-    `<div class="opt add${list.length === picker.hi ? " hi" : ""}" role="option" id="po-${ctx}-${list.length}" aria-selected="${list.length === picker.hi}" data-act="pickadd" data-ctx="${ctx}">+ Add new customer${q ? ` “${esc(q)}”` : ""}</div>`,
+    `<div class="opt add${list.length === picker.hi ? " hi" : ""}" role="option" id="po-${ctx}-${list.length}" aria-selected="${list.length === picker.hi}" data-act="pickadd" data-ctx="${ctx}">+ Add new buyer${q ? ` “${esc(q)}”` : ""} (5-field format)</div>`,
   );
   return (
     (list.length
       ? ""
-      : `<div class="opt" style="cursor:default"><small>No saved customer matches “${esc(q)}”.</small></div>`) +
+      : `<div class="opt" style="cursor:default"><small>No saved buyer matches “${esc(q)}”.</small></div>`) +
     opts.join("")
   );
 }
 function ncForm(ctx) {
-  const n = picker.nc,
-    edit = !!picker.editId;
-  return `<div class="panel" style="background:var(--soft)"><h2 style="font-size:15px">${edit ? "Update customer record" : "New customer"}</h2>
-   <div class="fields"><div style="grid-column:1/-1"><label for="nc-name">Registered name (as in BIR COR) or customer's name if B2C</label><input id="nc-name" data-nc="name" value="${esc(n.name)}"></div>
-    <div><label for="nc-vs">Buyer's tax status</label><select id="nc-vs" data-nc="vatStatus">${Object.entries(
-      VS_LABEL,
-    )
-      .map(
-        ([k, l]) =>
-          `<option value="${k}"${n.vatStatus === k ? " selected" : ""}>${l}</option>`,
-      )
-      .join("")}</select></div>
-    ${n.vatStatus === "FOREIGN" ? `<div><label for="nc-ctry">Country</label><input id="nc-ctry" data-nc="country" value="${esc(n.country || "")}"></div><div><label for="nc-ftid">Foreign tax ID (optional)</label><input id="nc-ftid" data-nc="foreignTaxId" value="${esc(n.foreignTaxId || "")}" placeholder="e.g. EIN, UEN, VAT no."></div>` : `<div><label for="nc-tin">TIN with branch code</label><input id="nc-tin" data-nc="tin" value="${esc(n.tin)}" placeholder="###-###-###-##### (blank for B2C)"></div>`}
-    <div><label for="nc-em">Email for e-invoices</label><input id="nc-em" type="email" data-nc="email" value="${esc(n.email)}"><label class="inline" style="margin:4px 0 0"><input type="checkbox" data-ncb="autoEmail"${n.autoEmail !== false ? " checked" : ""}> Send e-invoices automatically</label></div>
+  const n = picker.nc || {
+    name: "",
+    vatStatus: "NONVAT",
+    tin: "",
+    address: "",
+    email: "",
+    terms: "NET30",
+    wht: 0,
+    whtNote: "",
+    autoEmail: true,
+  };
+  const edit = !!picker.editId;
+  return `<div class="panel" style="background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:16px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h2 style="font-size:15px;margin:0">${edit ? "Update buyer record" : "New buyer details"}</h2><span style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Standard 5-Field Format</span></div>
+   <p class="hint" style="margin:-2px 0 12px">Buyer format: Registered Name, Tax Status, TIN, Business Address, and Email. Automatically saved as JSON for future invoices.</p>
+   <div class="fields">
+    <div style="grid-column:1/-1"><label for="nc-name" style="font-weight:600">Registered Name</label><input id="nc-name" data-nc="name" value="${esc(n.name)}" placeholder="e.g. LUZON AGRI COOPERATIVE" autofocus></div>
+    <div><label for="nc-vs" style="font-weight:600">Tax Status</label><select id="nc-vs" data-nc="vatStatus">
+      <option value="NONVAT"${n.vatStatus === "NONVAT" ? " selected" : ""}>Non-VAT registered</option>
+      <option value="VAT"${n.vatStatus === "VAT" ? " selected" : ""}>VAT-registered</option>
+      <option value="INDIVIDUAL"${n.vatStatus === "INDIVIDUAL" ? " selected" : ""}>Individual B2C</option>
+      <option value="FOREIGN"${n.vatStatus === "FOREIGN" ? " selected" : ""}>Foreign</option>
+    </select></div>
+    ${n.vatStatus === "FOREIGN" ? `<div><label for="nc-ctry" style="font-weight:600">Country</label><input id="nc-ctry" data-nc="country" value="${esc(n.country || "")}" placeholder="e.g. Singapore"></div><div><label for="nc-ftid" style="font-weight:600">Foreign Tax ID (optional)</label><input id="nc-ftid" data-nc="foreignTaxId" value="${esc(n.foreignTaxId || "")}" placeholder="e.g. EIN, UEN, VAT no."></div>` : `<div><label for="nc-tin" style="font-weight:600">TIN</label><input id="nc-tin" data-nc="tin" value="${esc(n.tin)}" placeholder="e.g. 456-789-012-00000"></div>`}
+    <div style="grid-column:1/-1"><label for="nc-ad" style="font-weight:600">Business Address</label><input id="nc-ad" data-nc="address" value="${esc(n.address)}" placeholder="e.g. Cabanatuan City, Nueva Ecija"></div>
+    <div style="grid-column:1/-1"><label for="nc-em" style="font-weight:600">Email</label><input id="nc-em" type="email" data-nc="email" value="${esc(n.email)}" placeholder="e.g. coop@luzonagri.ph"><label class="inline" style="margin:4px 0 0;font-size:12px"><input type="checkbox" data-ncb="autoEmail"${n.autoEmail !== false ? " checked" : ""}> Send e-invoices automatically upon issuance</label></div>
     <div><label for="nc-terms">Payment terms</label><select id="nc-terms" data-nc="terms">${Object.entries(
       TERMS,
     )
@@ -4720,23 +4909,55 @@ function ncForm(ctx) {
       )
       .join("")}</select></div>
     ${Number(n.wht) > 0 ? `<div><label for="nc-whn">Withholding note</label><input id="nc-whn" data-nc="whtNote" value="${esc(n.whtNote || "")}" placeholder="e.g. top withholding agent; EWT on professional fees"></div>` : ""}
-    <div style="grid-column:1/-1"><label for="nc-ad">Registered business address</label><input id="nc-ad" data-nc="address" value="${esc(n.address)}"></div></div>
+    </div>
    ${edit ? `<p class="hint" style="margin:0 0 8px">Changes apply to future documents only. Issued invoices keep the buyer details printed on them.</p>` : ""}
    <div class="err" id="nc-err">${picker.err}</div>
-   <div style="display:flex;gap:8px;margin-top:8px"><button class="btn primary" data-act="ncsave" data-ctx="${ctx}">${edit ? "Save changes" : "Save and use"}</button><button class="btn" data-act="nccancel">Cancel</button></div></div>`;
+   <div style="display:flex;gap:8px;margin-top:10px"><button type="button" class="btn primary" data-act="ncsave" data-ctx="${ctx}">${edit ? "Save changes" : "Save and use"}</button><button type="button" class="btn" data-act="nccancel">Cancel</button></div></div>`;
 }
 function pickerHtml(ctx, selId, locked) {
   if (picker.ctx === ctx && picker.adding) return ncForm(ctx);
   if (selId) {
-    const c = cust(selId);
-    return `<div class="buyercard"><div><b>${esc(c.name)}</b><small>${VS_LABEL[c.vatStatus]}</small><small>TIN ${esc(tinTxt(c) || "none")}</small><small>${esc(c.address)}</small>${c.email ? `<small>${esc(c.email)}</small>` : ""}</div>
-    <div style="display:flex;flex-direction:column;gap:2px;align-items:flex-end">${locked ? '<span class="due">Buyer fixed for this invoice</span>' : `<button class="btn link" data-act="pickchange" data-ctx="${ctx}">Change</button>`}<button class="btn link" data-act="ncedit" data-ctx="${ctx}" data-id="${c.id}">Update record</button></div></div>`;
+    const c = cust(selId) || (draft && draft.buyer) || {};
+    const buyerEmail = (draft && draft.buyerEmail) || (c && c.email) || "";
+    return `<div class="buyercard" style="border:1px solid var(--line);border-radius:8px;padding:12px 14px;background:var(--soft, #f8f9fa)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px">
+        <div>
+          <span style="font-size:11px;font-weight:700;letter-spacing:0.5px;color:var(--muted);text-transform:uppercase">Buyer (Sold to) &bull; Standard 5 Fields</span>
+          <h3 style="margin:2px 0 0;font-size:15px;color:var(--text)">${esc(c.name || "—")}</h3>
+        </div>
+        <div style="display:flex;gap:4px;align-items:center">
+          ${locked ? '<span class="due" style="font-size:11px">Buyer fixed</span>' : `<button type="button" class="btn link" data-act="pickchange" data-ctx="${ctx}" style="font-size:12px">Change</button>`}
+          <button type="button" class="btn link" data-act="ncedit" data-ctx="${ctx}" data-id="${c.id || selId}" style="font-size:12px">Edit details</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:6px 12px;font-size:12px;background:#fff;padding:8px 10px;border-radius:6px;border:1px solid var(--line)">
+        <div><span style="color:var(--muted)">Tax Status:</span> <b>${esc(VS_LABEL[c.vatStatus] || c.vatStatus || "Non-VAT registered")}</b></div>
+        <div><span style="color:var(--muted)">TIN:</span> <b>${esc(tinTxt(c) || c.tin || "None")}</b></div>
+        <div style="grid-column:1/-1"><span style="color:var(--muted)">Business Address:</span> <span>${esc(c.address || "—")}</span></div>
+        <div style="grid-column:1/-1;display:flex;align-items:center;gap:6px">
+          <span style="color:var(--muted)">Email:</span>
+          ${buyerEmail ? `<b style="color:var(--brand)">${esc(buyerEmail)}</b>` : `<span style="color:var(--muted);font-style:italic">None on file</span>`}
+        </div>
+      </div>
+      ${!buyerEmail ? `
+      <div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:11.5px;color:var(--muted);font-weight:600">Buyer Email for E-Invoice:</span>
+        <input type="email" id="buyerQuickEmail" placeholder="e.g. coop@luzonagri.ph" value="${esc((draft && draft.buyerEmail) || "")}" data-ctx="${ctx}" data-id="${c.id || selId}" style="font-size:12px;padding:3px 8px;border:1px solid var(--line);border-radius:4px;width:240px">
+        <button type="button" class="btn" data-act="savequickemail" data-ctx="${ctx}" data-id="${c.id || selId}" style="font-size:11.5px;padding:3px 10px">Save Email</button>
+        <span class="hint" style="margin:0;font-size:11px">Auto-sends via Brevo upon invoice issuance</span>
+      </div>` : ""}
+    </div>`;
   }
   const open = picker.ctx === ctx && picker.open;
-  return `<div class="picker"><label for="pk-${ctx}">Registered name or TIN</label>
-   <input id="pk-${ctx}" role="combobox" aria-autocomplete="list" aria-expanded="${open}" aria-controls="pl-${ctx}" autocomplete="off" data-pick="${ctx}" value="${esc(picker.ctx === ctx ? picker.q : "")}" placeholder="Start typing a name or TIN">
-   <div id="pl-${ctx}" class="sugg" role="listbox"${open ? "" : " hidden"}>${open ? suggHtml(ctx) : ""}</div></div>
-   <p class="hint" style="margin:6px 0 0">Saved customers fill in automatically. New ones are added to the customer database.</p>`;
+  return `<div class="picker">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <label for="pk-${ctx}" style="margin:0;font-weight:600">Registered Name or TIN</label>
+      <button type="button" class="btn link" data-act="pickadd" data-ctx="${ctx}" style="font-size:12px">+ Add new buyer (5 fields)</button>
+    </div>
+    <input id="pk-${ctx}" role="combobox" aria-autocomplete="list" aria-expanded="${open}" aria-controls="pl-${ctx}" autocomplete="off" data-pick="${ctx}" value="${esc(picker.ctx === ctx ? picker.q : "")}" placeholder="Start typing a name or TIN (e.g. LUZON AGRI COOPERATIVE)">
+    <div id="pl-${ctx}" class="sugg" role="listbox"${open ? "" : " hidden"}>${open ? suggHtml(ctx) : ""}</div>
+  </div>
+  <p class="hint" style="margin:6px 0 0">Saved buyers fill in automatically. New buyers follow the 5-field format: Registered Name, Tax Status, TIN, Business Address, and Email.</p>`;
 }
 function refreshSugg(ctx) {
   const el = document.getElementById("pl-" + ctx),
@@ -4769,6 +4990,7 @@ function setBuyer(ctx, id) {
   resetPicker();
   if (ctx === "inv" && draft) {
     draft.customerId = id;
+    draft.buyerEmail = "";
     draft.adv = {};
     const cw = cust(id);
     if (cw && !draft.termsSet) draft.terms = cw.terms || "NET30";
@@ -4797,7 +5019,7 @@ function saveNc(ctx) {
     }
   } else if (n.vatStatus !== "INDIVIDUAL" && !tin) {
     picker.err =
-      'A registered business buyer needs a TIN. Choose "Individual or end consumer" for walk-in B2C buyers.';
+      'A registered business buyer needs a TIN. Choose "Individual B2C" for walk-in B2C buyers.';
     return render();
   }
   if (tin && !TIN_RE.test(tin)) {
@@ -4832,7 +5054,10 @@ function saveNc(ctx) {
       vatStatus: n.vatStatus,
       country: (n.country || "").trim(),
       foreignTaxId: (n.foreignTaxId || "").trim(),
+      updatedAt: Date.now(),
     });
+    if (draft) draft.buyerEmail = n.email.trim();
+    saveCustomersJson();
     toast("Customer record updated");
     const id = picker.editId;
     resetPicker();
@@ -4848,7 +5073,7 @@ function saveNc(ctx) {
     wht: Number(n.wht || 0),
     whtNote: (n.whtNote || "").trim(),
     autoEmail: n.autoEmail !== false,
-    id: "c" + (CUSTOMERS.length + 1) + rand(3),
+    id: "c" + (CUSTOMERS.length + 1) + "_" + rand(3),
     name,
     tin: n.vatStatus === "FOREIGN" ? "" : tin,
     address: n.address.trim(),
@@ -4856,8 +5081,11 @@ function saveNc(ctx) {
     vatStatus: n.vatStatus,
     country: (n.country || "").trim(),
     foreignTaxId: (n.foreignTaxId || "").trim(),
+    updatedAt: Date.now(),
   };
   CUSTOMERS.push(c);
+  if (draft) draft.buyerEmail = c.email;
+  saveCustomersJson();
   toast(`${name} saved to customers`);
   if (ctx === "master") {
     resetPicker();
@@ -6811,7 +7039,12 @@ async function approveCR(r, note) {
   });
   if (r.updateMaster) {
     const c = cust(inv.customerId);
-    if (c) r.changes.forEach((ch) => (c[ch.field] = ch.to));
+    if (c) {
+      r.changes.forEach((ch) => (c[ch.field] = ch.to));
+      c.updatedAt = Date.now();
+      c._persisted = true;
+      saveCustomersJson();
+    }
   }
   toast(`Correction Notice No. ${cr.no} issued`);
   view = "corr";
@@ -7746,6 +7979,7 @@ function vCounter() {
      ${i.salesType === "CASH" ? `<div class="kminor"><span>Cash received</span><b>${money(i, cents(i.tender))}</b></div><div class="kminor"><span>Change given</span><b>${money(i, Math.max(cents(i.tender) - c.due, 0))}</b></div>` : `<div class="kminor"><span>Charge sale</span><b>Collected by the office</b></div>`}</div>
     <button class="kissue" data-act="knext">Next customer</button>
     <div class="panel" style="display:flex;flex-direction:column;gap:8px"><button class="btn" data-act="print">Print copy for buyer</button>
+     <button class="btn" data-act="download-pdf"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download PDF</button>
      <button class="btn" data-act="kemail"${(i.buyer || {}).email ? "" : " disabled"}>Email e-invoice${(i.buyer || {}).email ? ` to ${esc(i.buyer.email)}` : " (no email on file)"}</button>
      <button class="btn" data-act="kqr">Buyer scanned the QR code</button><button class="btn" data-act="kcorrect">Request correction or void</button></div>
     ${i.deliveries.length ? `<div class="panel hint" style="margin:0">${i.deliveries.map((d) => `${esc(d.via)}: ${esc(d.to)}`).join("<br>")}</div>` : ""}
@@ -8077,14 +8311,18 @@ function kIssue() {
       em = (kBuyer.email || "").trim();
     if (c0 && c0.id !== "ktemp" && c0.id !== "cw" && em && c0.email !== em) {
       c0.email = em;
+      c0.updatedAt = Date.now();
       slog("Customer email updated at counter", `${c0.name}: ${em}`);
+      saveCustomersJson();
     }
   }
   if (draft.customerId === "ktemp") {
     const t = CUSTOMERS.find((c) => c.id === "ktemp");
     t.id = "c" + (CUSTOMERS.length + 1) + rand(3);
+    t.updatedAt = Date.now();
     draft.customerId = t.id;
     slog("Customer added at counter", t.name);
+    saveCustomersJson();
   }
   if (draft.whtManual) {
     const cw2 = calc(draft);
@@ -8354,8 +8592,21 @@ function kHandle(e) {
   }
   if (act === "kemail") {
     const i = invOf(kIssued);
-    deliver(i.no, "Email", (i.buyer || {}).email || cust(i.customerId).email);
-    toast("E-invoice emailed (demo)");
+    const em = (i.buyer || {}).email || (cust(i.customerId) || {}).email;
+    if (!em) {
+      toast("No buyer email on file.");
+      return true;
+    }
+    toast("Sending e-invoice via Brevo...");
+    sendInvoiceEmail(i, em).then((res) => {
+      if (res.ok) {
+        deliver(i.no, "Brevo Email", em);
+        toast(`E-invoice emailed to ${em}`);
+      } else {
+        toast(`Email failed: ${res.error || "error"}`);
+      }
+      render();
+    });
     return true;
   }
   if (act === "kqr") {
@@ -9260,6 +9511,10 @@ document.addEventListener("click", (e) => {
       window.print();
       return;
     }
+    if (aa && aa.dataset.act === "download-pdf") {
+      downloadInvoicePdf(kIssued);
+      return;
+    }
     if (!can("counter")) {
       deny("counter");
       return;
@@ -9439,14 +9694,24 @@ document.addEventListener("click", (e) => {
     render();
   }
   if (act === "print") window.print();
+  if (act === "download-pdf") downloadInvoicePdf(no);
   if (act === "email") {
     const v = document.getElementById("em").value.trim();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) {
       toast("Enter a valid buyer email.");
       return;
     }
-    deliver(no, "Email", v);
-    toast("E-invoice emailed (simulated)");
+    const inv = invOf(no);
+    toast("Sending e-invoice via Brevo...");
+    sendInvoiceEmail(inv, v).then((res) => {
+      if (res.ok) {
+        deliver(no, "Brevo Email", v);
+        toast(`E-invoice ${no} sent to ${v}`);
+      } else {
+        deliver(no, "Email attempt", `${v} (failed: ${res.error || "error"})`);
+        toast(`Email failed: ${res.error || "error"}`);
+      }
+    });
   }
   if (act === "link") {
     const l = invOf(no).verifyUrl || viewLink(invOf(no).eisId);
@@ -10130,10 +10395,31 @@ document.addEventListener("click", (e) => {
         tin: isTin ? q : "",
         address: "",
         email: "",
-        vatStatus: isTin ? "VAT" : "VAT",
+        vatStatus: isTin ? "VAT" : "NONVAT",
       },
     };
     render();
+  }
+  if (act === "savequickemail") {
+    if (!need("customer.add")) return;
+    const id = a.dataset.id;
+    const inp = document.getElementById("buyerQuickEmail");
+    const em = inp ? inp.value.trim() : "";
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) {
+      toast("Enter a valid email address.");
+      return;
+    }
+    const c = cust(id);
+    if (c) {
+      c.email = em;
+      c.updatedAt = Date.now();
+      c._persisted = true;
+      saveCustomersJson();
+    }
+    if (draft) draft.buyerEmail = em;
+    toast(`Saved email ${em} for ${c ? c.name : "buyer"}`);
+    render();
+    return;
   }
   if (act === "pickchange") {
     const ctx = a.dataset.ctx;
@@ -10955,6 +11241,9 @@ document.addEventListener("input", (e) => {
       : el.value;
     renderCoBox();
     return;
+  }
+  if (el.id === "buyerQuickEmail" && draft) {
+    draft.buyerEmail = el.value.trim();
   }
   if (el.dataset.rf) {
     rFilter = el.dataset.rf;
@@ -11788,12 +12077,63 @@ async function syncWithDb() {
       isDbConnected = true;
       if (Array.isArray(data.invoices) && data.invoices.length > 0) {
         invoices = data.invoices;
-        if (Array.isArray(data.credits)) credits = data.credits;
-        if (Array.isArray(data.receipts)) receipts = data.receipts;
-        if (Array.isArray(data.secLog)) secLog = data.secLog;
-        if (data.settings && typeof data.settings === "object") {
-          Object.assign(S, data.settings);
+      }
+      if (Array.isArray(data.credits) && data.credits.length > 0) credits = data.credits;
+      if (Array.isArray(data.receipts) && data.receipts.length > 0) receipts = data.receipts;
+      if (Array.isArray(data.secLog) && data.secLog.length > 0) secLog = data.secLog;
+      if (data.settings && typeof data.settings === "object") {
+        Object.assign(S, data.settings);
+      }
+      if (Array.isArray(data.customers) && data.customers.length > 0) {
+        data.customers.forEach((c) => {
+          if (!c || !c.name) return;
+          const idx = CUSTOMERS.findIndex(
+            (x) => x.id === c.id || (c.tin && x.tin && x.tin.replace(/\D/g, "") === c.tin.replace(/\D/g, "")),
+          );
+          if (idx >= 0) {
+            const local = CUSTOMERS[idx];
+            const incTime = Number(c.updatedAt || c.updated_at || c.ts || c.version || 0);
+            const locTime = Number(local.updatedAt || local.updated_at || local.ts || local.version || 0);
+            if (incTime > 0 && locTime > 0) {
+              if (incTime >= locTime) {
+                Object.assign(local, c);
+              }
+            } else if (incTime > 0 && locTime === 0) {
+              Object.assign(local, c);
+            } else if (incTime === 0 && locTime > 0) {
+              // Local has newer timestamp metadata; preserve local edits
+            } else {
+              const isSeedMatch =
+                SEED_CUSTOMER_IDS.has(local.id) ||
+                SEED_CUSTOMER_IDS.has(c.id) ||
+                (local.tin && SEED_CUSTOMER_TINS.has(local.tin.replace(/\D/g, ""))) ||
+                (c.tin && SEED_CUSTOMER_TINS.has(c.tin.replace(/\D/g, "")));
+              const isUntouchedSeed =
+                (isSeedMatch || local._isSeed) && !local._persisted && !local.updatedAt;
+
+              // Explicit conflict rule: incoming matching seed IDs or TINs replace seed values; persisted local edits are preserved
+              Object.keys(c).forEach((k) => {
+                if (
+                  (isUntouchedSeed && c[k] !== undefined && c[k] !== null) ||
+                  local[k] === undefined ||
+                  local[k] === null ||
+                  local[k] === ""
+                ) {
+                  local[k] = c[k];
+                }
+              });
+            }
+          } else {
+            CUSTOMERS.push(c);
+          }
+        });
+        if (typeof localStorage !== "undefined") {
+          try {
+            localStorage.setItem("talaan_customers_json", JSON.stringify(CUSTOMERS));
+          } catch (e) {}
         }
+      }
+      if (Array.isArray(data.invoices) && data.invoices.length > 0) {
         [...invoices, ...receipts].forEach((x) => {
           if (!x.buyer && x.customerId) x.buyer = snap(x.customerId);
         });
