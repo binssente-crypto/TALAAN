@@ -2996,12 +2996,18 @@ function issue() {
     "Issued invoice",
     `${brLabel(d.branch)}: Invoice No. ${d.no}, ${peso(calc(d).due)}`,
   );
-  toast(`E-invoice ${d.no} issued. Send it to the buyer.`);
   go("detail", d.no);
-  signDoc(d, "INV").then(() => {
-    postDbSync("save_invoice", d);
-    render();
-  });
+  signDoc(d, "INV")
+    .then(() => {
+      postDbSync("save_invoice", d);
+      toast(`E-invoice ${d.no} issued and digitally signed.`);
+      render();
+    })
+    .catch((err) => {
+      postDbSync("save_invoice", d);
+      toast(`E-invoice ${d.no} issued.`);
+      render();
+    });
 }
 
 /* ================= Invoice detail ================= */
@@ -3576,10 +3582,6 @@ function approveReq(r, note) {
     "Approved credit memo",
     `${r.id} issued as Credit Memo No. ${cn.no}, ${peso(cnCalc(cn).due)}`,
   );
-  signDoc(cn, "CM").then(() => {
-    postDbSync("save_credit", cn);
-    render();
-  });
   r.status = "APPROVED";
   r.cnNo = cn.no;
   r.history.push({
@@ -3589,9 +3591,19 @@ function approveReq(r, note) {
       `Approved; issued as Credit Memo No. ${cn.no}` +
       (note ? `. ${note}` : ""),
   });
-  toast(`Credit Memo No. ${cn.no} approved and issued`);
   if (r.reissue && isCancelled(inv)) startReissue(cn);
   else go("credit", cn.no);
+  signDoc(cn, "CM")
+    .then(() => {
+      postDbSync("save_credit", cn);
+      toast(`Credit Memo No. ${cn.no} approved, issued, and digitally signed.`);
+      render();
+    })
+    .catch((err) => {
+      postDbSync("save_credit", cn);
+      toast(`Credit Memo No. ${cn.no} approved and issued.`);
+      render();
+    });
 }
 function issueCreditOld() {
   const t = now(),
