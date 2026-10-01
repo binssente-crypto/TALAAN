@@ -932,8 +932,7 @@ function need(p) {
   return can(p) || deny(p);
 }
 let userId =
-  (typeof localStorage !== "undefined" &&
-    localStorage.getItem("talaan_uid")) ||
+  (typeof localStorage !== "undefined" && localStorage.getItem("talaan_uid")) ||
   null;
 const me = () => USERS.find((u) => u.id === userId);
 const who = (u) => ({ id: u.id, name: u.name, role: u.role });
@@ -3151,9 +3150,13 @@ function vDetail() {
       .join("")}</ul></div>
     <div class="panel"><h2>Send to buyer</h2>
      ${i.deliveries.length ? `<ul class="dl">${i.deliveries.map((d) => `<li><b>${d.via}</b>, ${esc(d.to)}<br><span class="due">${fmtDate(d.at)}</span></li>`).join("")}</ul>` : `<p class="due" style="margin:0 0 10px">Not yet sent.</p>`}
-     ${me().roleCode !== "AUDITOR" ? `<div class="row3"><div><label for="em">Buyer email</label><input id="em" type="email" value="${esc(b.email || "")}" placeholder="name@company.ph"></div><button class="btn" data-act="email" data-no="${i.no}">Email e-invoice</button></div>
+     ${
+       me().roleCode !== "AUDITOR"
+         ? `<div class="row3"><div><label for="em">Buyer email</label><input id="em" type="email" value="${esc(b.email || "")}" placeholder="name@company.ph"></div><button class="btn" data-act="email" data-no="${i.no}">Email e-invoice</button></div>
      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn" data-act="link" data-no="${i.no}">Copy online view link</button><button class="btn" data-act="qrshown" data-no="${i.no}">Buyer scanned QR code</button></div>
-     <p class="hint">A printed copy is given on request or when electronic delivery isn't practicable (B2C). Use "Print copy for buyer".</p>` : `<p class="hint">Auditor inspection mode: delivery audit history is shown above.</p>`}
+     <p class="hint">A printed copy is given on request or when electronic delivery isn't practicable (B2C). Use "Print copy for buyer".</p>`
+         : `<p class="hint">Auditor inspection mode: delivery audit history is shown above.</p>`
+     }
      ${i.verifyUrl ? `<button class="btn link" data-verify="INV:${i.no}">Open the verification page for this invoice</button>` : ""}</div>
     <div class="panel"><h2>Adjustments</h2>
      ${cmReqs
@@ -3405,9 +3408,13 @@ function vCredit() {
     ${x.reason === "Cancellation of invoice" && !re && me().roleCode !== "AUDITOR" ? `<button class="btn primary" data-act="reissuenow" data-cn="${x.no}">Issue replacement invoice</button>` : ""}</div>
    <div class="panel"><h2>Send to buyer</h2>
     ${(x.deliveries || []).length ? `<ul class="dl">${x.deliveries.map((d) => `<li><b>${d.via}</b>, ${esc(d.to)}<br><span class="due">${fmtDate(d.at)}</span></li>`).join("")}</ul>` : `<p class="due" style="margin:0 0 10px">Not yet sent. The buyer should be informed so a VAT-registered buyer reduces its input VAT.</p>`}
-    ${me().roleCode !== "AUDITOR" ? `<div class="row3"><div><label for="cem">Buyer email</label><input id="cem" type="email" value="${esc((cust(inv.customerId) || {}).email || "")}"></div><button class="btn" data-act="cnemail" data-cn="${x.no}">Email credit memo</button></div>
+    ${
+      me().roleCode !== "AUDITOR"
+        ? `<div class="row3"><div><label for="cem">Buyer email</label><input id="cem" type="email" value="${esc((cust(inv.customerId) || {}).email || "")}"></div><button class="btn" data-act="cnemail" data-cn="${x.no}">Email credit memo</button></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn" data-act="cnlink" data-cn="${x.no}">Copy online view link</button><button class="btn" data-act="cnack" data-cn="${x.no}">Buyer signed printed copy</button></div>
-    <p class="hint">Delivery by email or online view serves as the buyer's notice for the electronic memo; a signed "Received by" line serves for a printed copy.</p>` : `<p class="hint">Auditor inspection mode: delivery audit history is shown above.</p>`}</div>
+    <p class="hint">Delivery by email or online view serves as the buyer's notice for the electronic memo; a signed "Received by" line serves for a printed copy.</p>`
+        : `<p class="hint">Auditor inspection mode: delivery audit history is shown above.</p>`
+    }</div>
    <div class="panel"><h2>Authorization</h2><ul class="dl"><li><b>Prepared by</b> ${esc(x.preparedBy ? x.preparedBy.name + ", " + x.preparedBy.role : "—")}<br><span class="due">${x.preparedAt ? fmtDate(x.preparedAt) : ""}</span></li>
     <li><b>Approved by</b> ${esc(x.approvedBy ? x.approvedBy.name + ", " + x.approvedBy.role : "—")}<br><span class="due">${x.approvedAt ? fmtDate(x.approvedAt) : ""}${x.approvalNote ? ". " + esc(x.approvalNote) : ""}</span></li>
     <li><b>PTI Electronic Invoice</b> ${esc((x.seller || S).ptiNo)}<br><span class="due">${esc((x.seller || S).branch)}; credit memo series ${esc((x.seller || {}).cn || "")}</span></li></ul></div>
@@ -6757,8 +6764,12 @@ function vCorr() {
   <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-go="corrections">Back</button><button class="btn" data-open="${inv.no}">View Invoice No. ${inv.no}</button><button class="btn" data-act="print">Print</button></div></div>
   <div class="grid2"><div>${docCorr(c)}</div><div class="stack noprint">
    <div class="panel"><h2>Send to buyer</h2>${c.deliveries.length ? `<ul class="dl">${c.deliveries.map((d) => `<li><b>${d.via}</b>, ${esc(d.to)}<br><span class="due">${fmtDate(d.at)}</span></li>`).join("")}</ul>` : '<p class="due" style="margin:0 0 10px">Not yet sent.</p>'}
-    ${me().roleCode !== "AUDITOR" ? `<div class="row3"><div><label for="crem">Buyer email</label><input id="crem" type="email" value="${esc((cust(inv.customerId) || {}).email || "")}"></div><button class="btn" data-act="cremail" data-cr="${c.no}">Email notice</button></div>
-    <button class="btn link" data-act="crack" data-cr="${c.no}">Buyer signed printed copy</button>` : `<p class="hint">Auditor inspection mode: delivery audit history is shown above.</p>`}</div>
+    ${
+      me().roleCode !== "AUDITOR"
+        ? `<div class="row3"><div><label for="crem">Buyer email</label><input id="crem" type="email" value="${esc((cust(inv.customerId) || {}).email || "")}"></div><button class="btn" data-act="cremail" data-cr="${c.no}">Email notice</button></div>
+    <button class="btn link" data-act="crack" data-cr="${c.no}">Buyer signed printed copy</button>`
+        : `<p class="hint">Auditor inspection mode: delivery audit history is shown above.</p>`
+    }</div>
    <div class="panel"><h2>Authorization</h2><ul class="dl"><li><b>Prepared by</b> ${esc(c.preparedBy.name)}, ${esc(c.preparedBy.role)}<br><span class="due">${fmtDate(c.preparedAt)}</span></li><li><b>Approved by</b> ${esc(c.approvedBy.name)}, ${esc(c.approvedBy.role)}<br><span class="due">${fmtDate(c.approvedAt)}${c.approvalNote ? ". " + esc(c.approvalNote) : ""}</span></li><li><b>PTI Electronic Invoice</b> ${esc(c.seller.ptiNo)}</li></ul></div>
    <div class="panel"><h2>Structured data</h2><button class="btn link" data-act="json">${showJson ? "Hide" : "Show"} JSON</button>${showJson ? `<pre>${esc(JSON.stringify(crJson(c), null, 2))}</pre>` : ""}</div></div></div>`;
 }
