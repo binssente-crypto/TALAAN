@@ -12163,45 +12163,31 @@ async function syncWithDb() {
     if (data.ok && data.dbConnected) {
       isDbConnected = true;
       if (Array.isArray(data.invoices) && data.invoices.length > 0) {
-        const validInvoices = [];
-        const invalidInvoices = [];
         data.invoices.forEach((inv) => {
-          if (
-            inv &&
-            typeof inv === "object" &&
-            typeof inv.no === "number" &&
-            Array.isArray(inv.items) &&
-            inv.items.length > 0 &&
-            inv.items.every(
+          if (!inv || typeof inv !== "object" || typeof inv.no !== "number") return;
+          // Normalise optional fields so the rest of the app never sees missing refs/deliveries
+          if (!inv.refs || typeof inv.refs !== "object" || Array.isArray(inv.refs)) inv.refs = {};
+          if (!Array.isArray(inv.deliveries)) inv.deliveries = [];
+          if (!Array.isArray(inv.items)) inv.items = [];
+          // Validate individual items only when the invoice has some
+          if (inv.items.length > 0) {
+            inv.items = inv.items.filter(
               (it) =>
                 it &&
                 typeof it === "object" &&
                 it.desc &&
-                it.desc.trim() &&
+                String(it.desc).trim() &&
                 Number.isFinite(Number(it.qty)) &&
                 Number(it.qty) > 0 &&
                 Number.isFinite(Number(it.price)) &&
                 Number(it.price) >= 0,
-            )
-          ) {
-            if (!inv.refs || typeof inv.refs !== "object" || Array.isArray(inv.refs)) inv.refs = {};
-            if (!Array.isArray(inv.deliveries)) inv.deliveries = [];
-            validInvoices.push(inv);
-          } else if (inv) {
-            invalidInvoices.push(inv);
+            );
           }
+          const idx = invoices.findIndex((loc) => loc.no === inv.no);
+          if (idx >= 0) invoices[idx] = inv;
+          else invoices.push(inv);
         });
-        if (invalidInvoices.length > 0) {
-          console.warn("Skipping malformed invoice records without valid items:", invalidInvoices);
-        }
-        if (validInvoices.length > 0) {
-          validInvoices.forEach((inc) => {
-            const idx = invoices.findIndex((loc) => loc.no === inc.no);
-            if (idx >= 0) invoices[idx] = inc;
-            else invoices.push(inc);
-          });
-          invoices.sort((a, b) => b.issuedAt - a.issuedAt);
-        }
+        invoices.sort((a, b) => b.issuedAt - a.issuedAt);
       }
       if (Array.isArray(data.credits) && data.credits.length > 0) {
         data.credits.forEach((inc) => {
