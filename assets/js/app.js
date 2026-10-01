@@ -402,6 +402,7 @@ function cust(id) {
       tin: "",
       address: "",
       vatStatus: "NON_VAT",
+      _isFallback: true,
     }
   );
 }
@@ -1852,10 +1853,17 @@ function dueInfo(inv) {
 
 /* ================= Invoice checks ================= */
 function checks(inv) {
-  const c = inv.buyer || inv.buyerSnapshot || cust(inv.customerId),
+  const c =
+    inv.buyer && !inv.buyer._isFallback
+      ? inv.buyer
+      : inv.buyerSnapshot && !inv.buyerSnapshot._isFallback
+        ? inv.buyerSnapshot
+        : inv.customerId
+          ? CUSTOMERS.find((x) => x && (x.id === inv.customerId || String(x.id) === String(inv.customerId)))
+          : null,
     out = [];
   out.push([!!S.ptiNo.trim(), "PTI Electronic Invoice on file"]);
-  out.push([!!c, "Buyer's registered name selected"]);
+  out.push([!!c && !c._isFallback, "Buyer's registered name selected"]);
   if (c && c.vatStatus === "FOREIGN")
     out.push([
       !!(c.country || "").trim() && !!(c.address || "").trim(),
@@ -3209,7 +3217,7 @@ function issue() {
   if (d.buyerEmail && d.buyer && !d.buyer.email) {
     d.buyer.email = d.buyerEmail;
   }
-  if (d.buyer && d.buyer.name && d.buyer.name.trim() && d.customerId !== "cw") {
+  if (d.buyer && d.buyer.name && d.buyer.name.trim() && d.customerId !== "cw" && !d.buyer._isFallback) {
     let matchedCust = CUSTOMERS.find((c) => c.id === d.customerId);
     if (!matchedCust) {
       matchedCust = CUSTOMERS.find(
@@ -3656,7 +3664,11 @@ function vCredits() {
   ${
     pend.length
       ? `<h2>Awaiting approval or declined</h2><div class="tablewrap" style="margin-bottom:18px"><table><thead><tr><th>Request</th><th>Prepared</th><th>Reference invoice</th><th>Reason</th><th class="num">Amount</th><th>Status</th></tr></thead><tbody>
-   ${pend.map((r) => `<tr class="row" data-opencmr="${r.id}" tabindex="0"><td><strong>${r.id}</strong></td><td>${esc(r.preparedBy ? r.preparedBy.name : "—")}<br><span class="due">${fmtDate(r.preparedAt)}</span></td><td>${r.invNo}</td><td>${esc(r.reason)}</td><td class="num">${peso(cnCalc(r).due)}</td><td>${r.status === "PENDING" ? '<span class="pill s-pending">Awaiting approval</span>' : '<span class="pill s-rejected">Declined</span>'}</td></tr>`).join("")}</tbody></table></div><h2>Issued credit memos</h2>`
+   ${pend.map((r) => {
+     const inv = invOf(r.invNo);
+     const amountHtml = inv ? peso(cnCalc(r).due) : '<span class="due">Unavailable</span>';
+     return `<tr class="row"${inv ? ` data-opencmr="${r.id}" tabindex="0"` : ' style="opacity:0.75"'} title="${inv ? "" : "Reference invoice missing"}"><td><strong>${r.id}</strong></td><td>${esc(r.preparedBy ? r.preparedBy.name : "—")}<br><span class="due">${fmtDate(r.preparedAt)}</span></td><td>${r.invNo}${inv ? "" : ' <span class="due">(missing)</span>'}</td><td>${esc(r.reason)}</td><td class="num">${amountHtml}</td><td>${r.status === "PENDING" ? '<span class="pill s-pending">Awaiting approval</span>' : '<span class="pill s-rejected">Declined</span>'}</td></tr>`;
+   }).join("")}</tbody></table></div><h2>Issued credit memos</h2>`
       : ""
   }
   ${
@@ -3670,7 +3682,8 @@ function vCredits() {
       (x) => {
         const inv = invOf(x.invNo);
         const buyerName = (inv && inv.buyer && inv.buyer.name) || (inv && cust(inv.customerId) && cust(inv.customerId).name) || "Walk-in Buyer";
-        return `<tr class="row" data-opencn="${x.no}" tabindex="0"><td><strong>${x.no}</strong></td><td>${fmtDate(x.at)}</td><td>${esc(buyerName)}</td><td>${x.invNo}</td><td>${esc(x.reason)}</td><td>${esc(x.preparedBy ? x.preparedBy.name : "—")} / ${esc(x.approvedBy ? x.approvedBy.name : "—")}</td><td class="num">${inv ? money(inv, cnCalc(x).due) : peso(cnCalc(x).due)}</td></tr>`;
+        const amountHtml = inv ? money(inv, cnCalc(x).due) : '<span class="due">Unavailable</span>';
+        return `<tr class="row"${inv ? ` data-opencn="${x.no}" tabindex="0"` : ' style="opacity:0.75"'} title="${inv ? "" : "Reference invoice missing"}"><td><strong>${x.no}</strong></td><td>${fmtDate(x.at)}</td><td>${esc(buyerName)}</td><td>${x.invNo}${inv ? "" : ' <span class="due">(missing)</span>'}</td><td>${esc(x.reason)}</td><td>${esc(x.preparedBy ? x.preparedBy.name : "—")} / ${esc(x.approvedBy ? x.approvedBy.name : "—")}</td><td class="num">${amountHtml}</td></tr>`;
       },
     )
     .join("")}</tbody></table></div>`
@@ -4815,7 +4828,7 @@ let picker = {
   },
   custQ = "";
 function snap(id) {
-  const c = cust(id);
+  const c = CUSTOMERS.find((x) => x && (x.id === id || String(x.id) === String(id)));
   return c
     ? {
         email: c.email || "",
@@ -12105,7 +12118,17 @@ async function syncWithDb() {
             typeof inv.no === "number" &&
             Array.isArray(inv.items) &&
             inv.items.length > 0 &&
-            inv.items.every((it) => it && typeof it === "object" && it.desc && (Number(it.qty) > 0 || Number(it.price) >= 0))
+            inv.items.every(
+              (it) =>
+                it &&
+                typeof it === "object" &&
+                it.desc &&
+                it.desc.trim() &&
+                Number.isFinite(Number(it.qty)) &&
+                Number(it.qty) > 0 &&
+                Number.isFinite(Number(it.price)) &&
+                Number(it.price) >= 0,
+            )
           ) {
             if (!inv.refs || typeof inv.refs !== "object" || Array.isArray(inv.refs)) inv.refs = {};
             if (!Array.isArray(inv.deliveries)) inv.deliveries = [];
@@ -12183,11 +12206,11 @@ async function syncWithDb() {
           if (!x.buyer && x.customerId) x.buyer = snap(x.customerId);
         });
         BRS.forEach((b) => {
-          const brInvs = invoices.filter(
-            (i) => (i.branch || "00000") === b.code && typeof i.no === "number",
+          const allInvs = [...invoices, ...(Array.isArray(data.invoices) ? data.invoices : [])].filter(
+            (i) => i && (i.branch || "00000") === b.code && typeof i.no === "number",
           );
-          if (brInvs.length > 0) {
-            b.next.inv = Math.max(...brInvs.map((i) => i.no)) + 1;
+          if (allInvs.length > 0) {
+            b.next.inv = Math.max(b.next.inv || 0, ...allInvs.map((i) => i.no + 1));
           }
           if (draft && draft.branch === b.code) {
             draft.no = b.next.inv;
