@@ -2698,7 +2698,7 @@ function go(v, no) {
   showJson = false;
   if (v === "new") draft = newDraft();
   render();
-  window.scrollTo(0, 0);
+  do { const _m = document.getElementById("main"); if (_m) _m.scrollTo(0, 0); } while(0);
 }
 function renderCoBox() {
   const coBox = document.getElementById("coBox");
@@ -3817,7 +3817,7 @@ function goNewC(invNo, reason, full, reissue) {
   view = "newCredit";
   current = null;
   render();
-  window.scrollTo(0, 0);
+  do { const _m = document.getElementById("main"); if (_m) _m.scrollTo(0, 0); } while(0);
 }
 function cnDraftObj() {
   const inv = invOf(draftC.invNo);
@@ -3928,7 +3928,7 @@ function issueCredit() {
   view = "cmreq";
   current = r.id;
   render();
-  window.scrollTo(0, 0);
+  do { const _m = document.getElementById("main"); if (_m) _m.scrollTo(0, 0); } while(0);
 }
 function approveReq(r, note) {
   const inv = invOf(r.invNo);
@@ -4117,7 +4117,7 @@ function goNewR(pre) {
     pre,
   );
   render();
-  window.scrollTo(0, 0);
+  do { const _m = document.getElementById("main"); if (_m) _m.scrollTo(0, 0); } while(0);
 }
 function openInvoicesOf(cid) {
   return invoices.filter(
@@ -6486,7 +6486,7 @@ function goNewSD(type) {
   view = "newStock";
   current = null;
   render();
-  window.scrollTo(0, 0);
+  do { const _m = document.getElementById("main"); if (_m) _m.scrollTo(0, 0); } while(0);
 }
 function vNewStock() {
   const d = sDraft,
@@ -6602,7 +6602,7 @@ function saveSD() {
   view = "stockdoc";
   current = id;
   render();
-  window.scrollTo(0, 0);
+  do { const _m = document.getElementById("main"); if (_m) _m.scrollTo(0, 0); } while(0);
 }
 function transferPanel(d) {
   const u = me();
@@ -6728,7 +6728,7 @@ function openVerify(kind, no, tamper) {
   view = "verify";
   current = null;
   render();
-  window.scrollTo(0, 0);
+  do { const _m = document.getElementById("main"); if (_m) _m.scrollTo(0, 0); } while(0);
   runVerify();
 }
 async function runVerify() {
@@ -6945,7 +6945,7 @@ function goNewCR(no) {
   view = "newCorr";
   current = null;
   render();
-  window.scrollTo(0, 0);
+  do { const _m = document.getElementById("main"); if (_m) _m.scrollTo(0, 0); } while(0);
 }
 function crChecks() {
   const d = crDraft,
@@ -7079,7 +7079,7 @@ function submitCR() {
   view = "corrreq";
   current = r.id;
   render();
-  window.scrollTo(0, 0);
+  do { const _m = document.getElementById("main"); if (_m) _m.scrollTo(0, 0); } while(0);
 }
 async function approveCR(r, note) {
   const inv = invOf(r.invNo);
@@ -9677,7 +9677,7 @@ document.addEventListener("click", (e) => {
     view = "item";
     current = oi.dataset.openitem;
     render();
-    window.scrollTo(0, 0);
+    do { const _m = document.getElementById("main"); if (_m) _m.scrollTo(0, 0); } while(0);
     return;
   }
   const osd = e.target.closest("[data-opensd]");
@@ -9685,7 +9685,7 @@ document.addEventListener("click", (e) => {
     view = "stockdoc";
     current = osd.dataset.opensd;
     render();
-    window.scrollTo(0, 0);
+    do { const _m = document.getElementById("main"); if (_m) _m.scrollTo(0, 0); } while(0);
     return;
   }
   const sld = e.target.closest("[data-sldel]");
@@ -9699,7 +9699,7 @@ document.addEventListener("click", (e) => {
     view = "corrreq";
     current = ocrr.dataset.opencrr;
     render();
-    window.scrollTo(0, 0);
+    do { const _m = document.getElementById("main"); if (_m) _m.scrollTo(0, 0); } while(0);
     return;
   }
   const ocn2 = e.target.closest("[data-opencr]");
@@ -9708,7 +9708,7 @@ document.addEventListener("click", (e) => {
     current = +ocn2.dataset.opencr;
     showJson = false;
     render();
-    window.scrollTo(0, 0);
+    do { const _m = document.getElementById("main"); if (_m) _m.scrollTo(0, 0); } while(0);
     return;
   }
   const ocr = e.target.closest("[data-opencmr]");
@@ -9716,7 +9716,7 @@ document.addEventListener("click", (e) => {
     view = "cmreq";
     current = ocr.dataset.opencmr;
     render();
-    window.scrollTo(0, 0);
+    do { const _m = document.getElementById("main"); if (_m) _m.scrollTo(0, 0); } while(0);
     return;
   }
   const oc = e.target.closest("[data-opencn]");
@@ -9734,7 +9734,7 @@ document.addEventListener("click", (e) => {
       logo: r.logo || curDesign().logo,
     });
     render();
-    window.scrollTo(0, 0);
+    do { const _m = document.getElementById("main"); if (_m) _m.scrollTo(0, 0); } while(0);
     return;
   }
   const del = e.target.closest("[data-del]");
@@ -9948,7 +9948,7 @@ document.addEventListener("click", (e) => {
     pTab = "items";
     view = "products";
     render();
-    window.scrollTo(0, 0);
+    do { const _m = document.getElementById("main"); if (_m) _m.scrollTo(0, 0); } while(0);
   }
   if (act === "itemsave") saveItem();
   if (act === "itemcancel") {
@@ -10316,7 +10316,7 @@ document.addEventListener("click", (e) => {
       err: "",
     };
     render();
-    window.scrollTo(0, 0);
+    do { const _m = document.getElementById("main"); if (_m) _m.scrollTo(0, 0); } while(0);
   }
   if (act === "usersave") saveUser();
   if (act === "usercancel") {
