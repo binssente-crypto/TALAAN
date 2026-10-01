@@ -156,7 +156,7 @@ module.exports = async function handler(req, res) {
             const doc = typeof r.doc_data === "string" ? JSON.parse(r.doc_data) : r.doc_data;
             if (doc) {
               if (!Array.isArray(doc.items)) doc.items = [];
-              if (!doc.refs || typeof doc.refs !== "object") doc.refs = {};
+              if (!doc.refs || typeof doc.refs !== "object" || Array.isArray(doc.refs)) doc.refs = {};
               if (!Array.isArray(doc.deliveries)) doc.deliveries = [];
             }
             return doc;

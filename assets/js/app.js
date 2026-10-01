@@ -395,7 +395,15 @@ function peso(c) {
   return "₱" + amt(c);
 }
 function cust(id) {
-  return CUSTOMERS.find((c) => c.id === id);
+  return (
+    CUSTOMERS.find((c) => c && (c.id === id || String(c.id) === String(id))) || {
+      id,
+      name: "Walk-in Buyer",
+      tin: "",
+      address: "",
+      vatStatus: "NON_VAT",
+    }
+  );
 }
 function esc(s) {
   return String(s ?? "").replace(
@@ -526,7 +534,8 @@ function isoDate(iso) {
   return dDate(new Date(iso + "T12:00:00+08:00").getTime());
 }
 function invOf(no) {
-  return invoices.find((i) => i.no === no);
+  if (no == null) return undefined;
+  return invoices.find((i) => i && (i.no === no || i.no === +no || String(i.no) === String(no)));
 }
 function viewLink(id) {
   return "https://einvoice.talaan.ph/v/" + id;
@@ -2901,7 +2910,7 @@ function vList() {
     .sort((a, b) => b.issuedAt - a.issuedAt)
     .map(
       (i) =>
-        `<tr class="row" data-open="${i.no}" tabindex="0"><td><strong>${i.no}</strong>${(i.refs && i.refs.manual) ? ' <span class="due">(replaces manual)</span>' : ""}</td><td>${esc(brOf(i.branch).name)}<br><span class="due">${i.branch}</span></td><td>${fmtDate(i.issuedAt)}</td><td>${esc((i.buyer || cust(i.customerId)).name)}</td><td><span class="pill fmt">${formatOf(i)}</span> ${i.salesType === "CASH" ? "Cash" : "Charge"}</td><td class="num">${money(i, calc(i).due)}${isFX(i) ? `<br><span class="due">${peso(toPHP(i, calc(i).due))}</span>` : ""}${creditsOf(i.no).length ? `<br><span class="due">less CM ${money(i, creditTotal(i.no))}</span>` : ""}</td><td>${delivered(i) ? '<span class="pill s-paid">Sent</span>' : isCancelled(i) ? "—" : '<span class="pill s-pending">Not yet</span>'}</td><td>${collPill(i)}</td><td>${reportPill(i)} ${dueInfo(i)}</td></tr>`,
+        `<tr class="row" data-open="${i.no}" tabindex="0"><td><strong>${i.no}</strong>${(i.refs && i.refs.manual) ? ' <span class="due">(replaces manual)</span>' : ""}</td><td>${esc(brOf(i.branch).name)}<br><span class="due">${i.branch}</span></td><td>${fmtDate(i.issuedAt)}</td><td>${esc(((i.buyer || cust(i.customerId)) || {}).name || "Walk-in Buyer")}</td><td><span class="pill fmt">${formatOf(i)}</span> ${i.salesType === "CASH" ? "Cash" : "Charge"}</td><td class="num">${money(i, calc(i).due)}${isFX(i) ? `<br><span class="due">${peso(toPHP(i, calc(i).due))}</span>` : ""}${creditsOf(i.no).length ? `<br><span class="due">less CM ${money(i, creditTotal(i.no))}</span>` : ""}</td><td>${delivered(i) ? '<span class="pill s-paid">Sent</span>' : isCancelled(i) ? "—" : '<span class="pill s-pending">Not yet</span>'}</td><td>${collPill(i)}</td><td>${reportPill(i)} ${dueInfo(i)}</td></tr>`,
     )
     .join("")}
   </tbody></table></div>
@@ -3640,26 +3649,29 @@ function cnJson(cn) {
 /* ================= Credit memo views ================= */
 function vCredits() {
   const pend = cmReqs
-    .filter((r) => r.status !== "APPROVED" && inBr(invOf(r.invNo).branch))
+    .filter((r) => r.status !== "APPROVED" && inBr((invOf(r.invNo) || {}).branch || r.branch || "00000"))
     .slice()
     .reverse();
   return `<div class="head"><div><h1>Credit memos</h1><p class="sub">Decreases to issued e-invoices. Each is prepared, then approved by a different authorized person before it is numbered and issued.</p></div></div>
   ${
     pend.length
       ? `<h2>Awaiting approval or declined</h2><div class="tablewrap" style="margin-bottom:18px"><table><thead><tr><th>Request</th><th>Prepared</th><th>Reference invoice</th><th>Reason</th><th class="num">Amount</th><th>Status</th></tr></thead><tbody>
-   ${pend.map((r) => `<tr class="row" data-opencmr="${r.id}" tabindex="0"><td><strong>${r.id}</strong></td><td>${esc(r.preparedBy.name)}<br><span class="due">${fmtDate(r.preparedAt)}</span></td><td>${r.invNo}</td><td>${esc(r.reason)}</td><td class="num">${peso(cnCalc(r).due)}</td><td>${r.status === "PENDING" ? '<span class="pill s-pending">Awaiting approval</span>' : '<span class="pill s-rejected">Declined</span>'}</td></tr>`).join("")}</tbody></table></div><h2>Issued credit memos</h2>`
+   ${pend.map((r) => `<tr class="row" data-opencmr="${r.id}" tabindex="0"><td><strong>${r.id}</strong></td><td>${esc(r.preparedBy ? r.preparedBy.name : "—")}<br><span class="due">${fmtDate(r.preparedAt)}</span></td><td>${r.invNo}</td><td>${esc(r.reason)}</td><td class="num">${peso(cnCalc(r).due)}</td><td>${r.status === "PENDING" ? '<span class="pill s-pending">Awaiting approval</span>' : '<span class="pill s-rejected">Declined</span>'}</td></tr>`).join("")}</tbody></table></div><h2>Issued credit memos</h2>`
       : ""
   }
   ${
     credits.length
       ? `<div class="tablewrap"><table><thead><tr><th>Credit memo no.</th><th>Date</th><th>Buyer</th><th>Reference invoice</th><th>Reason</th><th>Prepared / approved by</th><th class="num">Amount credited</th></tr></thead><tbody>
   ${credits
-    .filter((x) => inBr(invOf(x.invNo).branch))
+    .filter((x) => inBr((invOf(x.invNo) || {}).branch || x.branch || "00000"))
     .slice()
     .sort((a, b) => b.at - a.at)
     .map(
-      (x) =>
-        `<tr class="row" data-opencn="${x.no}" tabindex="0"><td><strong>${x.no}</strong></td><td>${fmtDate(x.at)}</td><td>${esc(cust(invOf(x.invNo).customerId).name)}</td><td>${x.invNo}</td><td>${esc(x.reason)}</td><td>${esc(x.preparedBy ? x.preparedBy.name : "—")} / ${esc(x.approvedBy ? x.approvedBy.name : "—")}</td><td class="num">${money(invOf(x.invNo), cnCalc(x).due)}</td></tr>`,
+      (x) => {
+        const inv = invOf(x.invNo);
+        const buyerName = (inv && inv.buyer && inv.buyer.name) || (inv && cust(inv.customerId) && cust(inv.customerId).name) || "Walk-in Buyer";
+        return `<tr class="row" data-opencn="${x.no}" tabindex="0"><td><strong>${x.no}</strong></td><td>${fmtDate(x.at)}</td><td>${esc(buyerName)}</td><td>${x.invNo}</td><td>${esc(x.reason)}</td><td>${esc(x.preparedBy ? x.preparedBy.name : "—")} / ${esc(x.approvedBy ? x.approvedBy.name : "—")}</td><td class="num">${inv ? money(inv, cnCalc(x).due) : peso(cnCalc(x).due)}</td></tr>`;
+      },
     )
     .join("")}</tbody></table></div>`
       : `<div class="panel empty">No credit memos yet. Issue one from the invoice you need to reduce.</div>`
@@ -5427,21 +5439,23 @@ function movesOf(id, loc) {
         });
     }),
   );
-  credits.forEach((cn) =>
+  credits.forEach((cn) => {
+    if (!cn || !Array.isArray(cn.lines)) return;
     cn.lines.forEach((l) => {
-      const inv = invOf(cn.invNo),
-        it = inv.items[l.src];
-      if (it.itemId === id && l.qty)
+      const inv = invOf(cn.invNo);
+      if (!inv || !Array.isArray(inv.items) || !l || l.src == null) return;
+      const it = inv.items[l.src];
+      if (it && it.itemId === id && l.qty)
         m.push({
           loc: inv.branch || "00000",
           at: cn.at,
           kind: "CUSTRETURN",
-          doc: `Credit Memo ${cn.no} (${cn.reason.toLowerCase()})`,
+          doc: `Credit Memo ${cn.no} (${(cn.reason || "").toLowerCase()})`,
           ref: { t: "cn", id: cn.no },
           qty: l.qty,
         });
-    }),
-  );
+    });
+  });
   const f = loc ? m.filter((x) => x.loc === loc) : m;
   f.sort((a, b) => a.at - b.at);
   let q = 0,
@@ -7057,7 +7071,7 @@ async function approveCR(r, note) {
 }
 function vCorrections() {
   const pend = corrReqs
-    .filter((r) => r.status !== "APPROVED" && inBr(invOf(r.invNo).branch))
+    .filter((r) => r.status !== "APPROVED" && inBr((invOf(r.invNo) || {}).branch || r.branch || "00000"))
     .slice()
     .reverse();
   return `<div class="head"><div><h1>Correction notices</h1><p class="sub">Corrections of buyer details on issued invoices, by separate document. The invoices themselves are never altered.</p></div></div>
@@ -7071,7 +7085,7 @@ function vCorrections() {
     corrections.length
       ? `<div class="tablewrap"><table><thead><tr><th>Notice no.</th><th>Date</th><th>Reference invoice</th><th>Corrected</th><th>Prepared / approved by</th></tr></thead><tbody>
    ${corrections
-     .filter((c) => inBr(invOf(c.invNo).branch))
+     .filter((c) => inBr((invOf(c.invNo) || {}).branch || c.branch || "00000"))
      .slice()
      .reverse()
      .map(
@@ -12082,13 +12096,32 @@ async function syncWithDb() {
     if (data.ok && data.dbConnected) {
       isDbConnected = true;
       if (Array.isArray(data.invoices) && data.invoices.length > 0) {
+        const validInvoices = [];
+        const invalidInvoices = [];
         data.invoices.forEach((inv) => {
-          if (!inv) return;
-          if (!Array.isArray(inv.items)) inv.items = [];
-          if (!inv.refs || typeof inv.refs !== "object") inv.refs = {};
-          if (!Array.isArray(inv.deliveries)) inv.deliveries = [];
+          if (
+            inv &&
+            typeof inv === "object" &&
+            typeof inv.no === "number" &&
+            Array.isArray(inv.items) &&
+            inv.items.length > 0 &&
+            inv.items.every((it) => it && typeof it === "object" && it.desc && (Number(it.qty) > 0 || Number(it.price) >= 0))
+          ) {
+            if (!inv.refs || typeof inv.refs !== "object" || Array.isArray(inv.refs)) inv.refs = {};
+            if (!Array.isArray(inv.deliveries)) inv.deliveries = [];
+            validInvoices.push(inv);
+          } else if (inv) {
+            invalidInvoices.push(inv);
+          }
         });
-        invoices = data.invoices.filter((i) => i && typeof i === "object" && typeof i.no === "number");
+        if (invalidInvoices.length > 0) {
+          console.warn("Skipping malformed invoice records without valid items:", invalidInvoices);
+        }
+        if (validInvoices.length > 0) {
+          invoices = validInvoices;
+        } else if (invalidInvoices.length > 0) {
+          toast("Warning: Synced invoices contained invalid item data and were skipped.");
+        }
       }
       if (Array.isArray(data.credits) && data.credits.length > 0) credits = data.credits;
       if (Array.isArray(data.receipts) && data.receipts.length > 0) receipts = data.receipts;
