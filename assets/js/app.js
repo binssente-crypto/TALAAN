@@ -470,7 +470,7 @@ function phNow() {
   });
 }
 function isoDate(iso) {
-  return dDate(new Date(iso + "T12:00:00").getTime());
+  return dDate(new Date(iso + "T12:00:00+08:00").getTime());
 }
 function invOf(no) {
   return invoices.find((i) => i.no === no);
@@ -1504,6 +1504,10 @@ function leftBox(f, c) {
 /* ================= Credit memos (RMC 98-2026 IV.8) ================= */
 function cnPseudo(cn) {
   const inv = invOf(cn.invNo);
+  const origCalc = calc(inv);
+  const creditSum = cn.lines.reduce((a, l) => a + l.amount, 0);
+  const invSum = inv.items.reduce((a, it) => a + lineNet(it), 0) || 1;
+  const propWht = Math.round((origCalc.wht * creditSum) / invSum);
   return {
     vat: inv.vat,
     incl: inv.incl,
@@ -1511,6 +1515,8 @@ function cnPseudo(cn) {
     scFrozen: true,
     group: inv.group,
     wht: inv.wht,
+    whtMode: inv.whtMode,
+    whtAmt: inv.whtMode === "AMT" ? propWht / 100 : inv.whtAmt,
     items: cn.lines.map((l) => {
       const o = inv.items[l.src],
         R = lineNet(o) || 1;
@@ -1597,9 +1603,19 @@ const TERMS = {
   CUSTOM: ["Specific due date", null],
 };
 function addDaysISO(iso, n) {
-  const d = new Date(iso + "T12:00:00");
-  d.setDate(d.getDate() + n);
-  return todayISO(d.getTime());
+  if (!iso || typeof iso !== "string") return todayISO();
+  const [y, m, day] = iso.split("-").map(Number);
+  if (!y || !m || !day) return todayISO();
+  const base = new Date(Date.UTC(y, m - 1, day));
+  if (
+    base.getUTCFullYear() !== y ||
+    base.getUTCMonth() !== m - 1 ||
+    base.getUTCDate() !== day
+  ) {
+    return todayISO();
+  }
+  const d = new Date(Date.UTC(y, m - 1, day + Number(n || 0)));
+  return isNaN(d.getTime()) ? todayISO() : d.toISOString().slice(0, 10);
 }
 function dueDateOf(inv) {
   if (inv.salesType !== "CHARGE") return null;
@@ -1631,7 +1647,6 @@ function agingData(asOf) {
     .filter(
       (i) =>
         i.salesType === "CHARGE" &&
-        !isCancelled(i) &&
         inBr(i.branch) &&
         (i.txnDate || todayISO(i.issuedAt)) <= asOf,
     )
@@ -1771,13 +1786,13 @@ function dueInfo(inv) {
 
 /* ================= Invoice checks ================= */
 function checks(inv) {
-  const c = cust(inv.customerId),
+  const c = inv.buyer || inv.buyerSnapshot || cust(inv.customerId),
     out = [];
   out.push([!!S.ptiNo.trim(), "PTI Electronic Invoice on file"]);
   out.push([!!c, "Buyer's registered name selected"]);
   if (c && c.vatStatus === "FOREIGN")
     out.push([
-      !!(c.country || "").trim() && !!c.address.trim(),
+      !!(c.country || "").trim() && !!(c.address || "").trim(),
       "Foreign buyer's country and address on file",
     ]);
   out.push([
@@ -1902,7 +1917,7 @@ function checks(inv) {
     toPHP(inv, calc(inv).totalSales) >= 100000
   )
     out.push([
-      TIN_RE.test(c.tin) && !!c.address.trim(),
+      TIN_RE.test(c.tin) && !!(c.address || "").trim(),
       "Sale of ₱1,000 or more to a VAT-registered buyer: registered name, address and TIN shown",
     ]);
   if (inv.txnDate)
@@ -2440,11 +2455,13 @@ function renderQRs() {
   document.querySelectorAll("[data-qr]").forEach((el) => {
     if (el.dataset.done) return;
     el.dataset.done = 1;
+    const w = el.clientWidth || parseInt(el.style.width, 10) || 128;
+    const h = el.clientHeight || parseInt(el.style.height, 10) || 128;
     try {
       new QRCode(el, {
         text: el.dataset.qr,
-        width: 128,
-        height: 128,
+        width: w,
+        height: h,
         correctLevel: QRCode.CorrectLevel.M,
       });
     } catch (e) {
@@ -2567,7 +2584,9 @@ function render() {
 function renderCore() {
   const navEl = document.querySelector("nav.side");
   const appEl = document.querySelector(".app");
+  const headerEl = document.getElementById("appHeader");
   if (!me()) {
+    if (headerEl) headerEl.style.display = "none";
     navEl.style.display = "none";
     if (appEl) appEl.classList.add("auth-mode");
     document.getElementById("main").innerHTML = portalOpen
@@ -2583,11 +2602,13 @@ function renderCore() {
     .querySelector(".app")
     .classList.toggle("counter-mode", uiMode === "counter");
   if (uiMode === "counter") {
+    if (headerEl) headerEl.style.display = "none";
     navEl.style.display = "none";
     document.getElementById("main").innerHTML = vCounter();
     renderQRs();
     return;
   }
+  if (headerEl) headerEl.style.display = "flex";
   navEl.style.display = "";
   if (!canView(view)) {
     view = "list";
@@ -2628,6 +2649,31 @@ function renderCore() {
    ${can("counter") ? `<button class="btn" style="margin-top:8px;width:100%" data-act="kmode">Switch to cashier counter</button>` : ""}<button class="btn link" data-act="signout">Sign out</button>`;
   document.getElementById("coBox").innerHTML =
     `${esc(S.name)}<br>${S.vat ? "VAT" : "Non-VAT"} reg. TIN ${esc(S.tin)}`;
+
+  const hCo = document.getElementById("headerCompanyBox");
+  if (hCo) hCo.innerHTML = `<b>${esc(S.name)}</b> &bull; ${S.vat ? "VAT" : "Non-VAT"} reg. TIN ${esc(S.tin)}${S.ptiNo ? ` &bull; PTI: ${esc(S.ptiNo)}` : ""}`;
+  const hDb = document.getElementById("headerDbStatus");
+  if (hDb) hDb.innerHTML = `<span class="db-dot ${isDbConnected ? "connected" : "local"}">●</span> ${isDbConnected ? "Aiven MySQL 8.4" : "Local session"}`;
+  const hBr = document.getElementById("headerBranchBox");
+  if (hBr) {
+    if (me().branch === "ALL") {
+      hBr.innerHTML = `<label for="vbr" style="font-size:11px;font-weight:600;color:var(--muted)">Branch:</label><select class="header-branch-select" id="vbr" data-vbr="1">${[["ALL", "All branches (view only)"], ...BRS.filter((b) => b.active).map((b) => [b.code, brLabel(b.code)])].map(([v, l]) => `<option value="${v}"${viewBr === v ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+    } else {
+      hBr.innerHTML = `<span class="header-fixed-branch">Branch: <b>${esc(brLabel(me().branch))}</b></span>`;
+    }
+  }
+  const mobBr = document.getElementById("mobileBranchBox");
+  if (mobBr) mobBr.textContent = me().branch === "ALL" ? (viewBr === "ALL" ? "All branches" : brLabel(viewBr)) : brLabel(me().branch);
+  const hCtr = document.getElementById("headerCounterBox");
+  if (hCtr) {
+    hCtr.innerHTML = can("counter") ? `<button class="header-action-btn" data-act="kmode" title="Open POS Cashier Counter"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><span>Cashier counter</span></button>` : "";
+  }
+  const hUser = document.getElementById("headerUserBox");
+  if (hUser) {
+    const initials = (me().name || "U").split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
+    hUser.innerHTML = `<div class="user-chip"><div class="user-avatar" title="${esc(me().name)}">${esc(initials)}</div><div class="user-text"><span class="user-chip-name">${esc(me().name)}</span><span class="user-chip-role">${esc(ROLES[me().roleCode].label)}${me().mfa ? `<span class="mfa-chip">2FA</span>` : ""}</span></div><button class="signout-icon-btn" data-act="signout" title="Sign out (${esc(me().name)})" aria-label="Sign out"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></button></div>`;
+  }
+
   const navKey =
     {
       newCorr: "corrections",
@@ -2645,13 +2691,40 @@ function renderCore() {
       newDcr: "design",
       dcr: "provider",
     }[view] || view;
+  const activeNavBtn = document.querySelector(`.navbtn[data-go="${navKey}"]`);
+  const activeParent = activeNavBtn
+    ? activeNavBtn.dataset.parent || activeNavBtn.dataset.go
+    : navKey;
+
   document.querySelectorAll(".navbtn").forEach((b) => {
     const allowed = canView(b.dataset.go);
-    b.style.display = allowed ? "" : "none";
-    if (allowed) {
-      if (b.dataset.go === navKey) b.setAttribute("aria-current", "page");
-      else b.removeAttribute("aria-current");
+    if (!allowed) {
+      b.style.display = "none";
+      return;
     }
+    // Inside tabs (with data-parent) only appear if their parent main tab is active
+    if (b.dataset.parent) {
+      b.style.display = b.dataset.parent === activeParent ? "" : "none";
+    } else {
+      b.style.display = "";
+      const hasInsideTabs = !!document.querySelector(
+        `.navbtn[data-parent="${b.dataset.go}"]`,
+      );
+      if (hasInsideTabs) {
+        b.setAttribute(
+          "aria-expanded",
+          b.dataset.go === activeParent ? "true" : "false",
+        );
+      }
+    }
+    if (b.dataset.go === navKey) b.setAttribute("aria-current", "page");
+    else b.removeAttribute("aria-current");
+  });
+  document.querySelectorAll(".nav-category").forEach((cat) => {
+    const hasVisible = Array.from(cat.querySelectorAll(".navbtn")).some(
+      (b) => b.style.display !== "none",
+    );
+    cat.style.display = hasVisible ? "" : "none";
   });
   const open = S.reporting
     ? invoices.filter((i) => i.status === "pending" || i.status === "rejected")
@@ -3028,7 +3101,8 @@ function issue() {
       .applications.push({ invNo: d.no, amount: v, at: t }),
   );
   if (isFX(d)) d.fx = rateFor(curOf(d), d.txnDate || todayISO());
-  d.buyer = snap(d.customerId);
+  d.buyer = d.buyerSnapshot || snap(d.customerId);
+  delete d.buyerSnapshot;
   d.seller = sellerSnap(d.branch);
   d.seller.vat = d.vat;
   if (d.refs.aggregate)
@@ -3688,6 +3762,11 @@ function startReissue(cn) {
   const src = invOf(cn.invNo);
   if (!newInvFor(src.branch)) return;
   Object.assign(draft, {
+    cur: src.cur,
+    vat: src.vat,
+    whtMode: src.whtMode,
+    whtAmt: src.whtAmt,
+    whtManual: src.whtManual,
     promo: JSON.parse(
       JSON.stringify(src.promo || { name: "", type: "PCT", value: 0 }),
     ),
@@ -3706,18 +3785,18 @@ function startReissue(cn) {
 
 /* ================= Receipts register views ================= */
 function vReceipts() {
-  const list = receipts
-      .filter((r) => inBr(r.branch))
+  const brReceipts = receipts.filter((r) => inBr(r.branch)),
+    list = brReceipts
       .filter(
         (r) =>
           rFilter === "all" || (r.type === "ADVANCE" && unappliedOf(r) > 0),
       )
       .sort((a, b) => b.no - a.no),
-    openAdv = receipts.filter(
+    openAdv = brReceipts.filter(
       (r) => r.type === "ADVANCE" && unappliedOf(r) > 0,
     );
   return `<div class="head"><div><h1>Receipts register</h1><p class="sub">Collection receipts (Annex B6), kept separate from invoices. Each one traces to the invoices it settles.</p></div>${can("ops") && me().roleCode !== "AUDITOR" ? '<button class="btn primary" data-act="newreceipt">Record receipt</button>' : ""}</div>
-  <div class="stats"><div class="stat"><b>${peso(receipts.reduce((a, r) => a + r.amount, 0))}</b><span>Total received</span></div><div class="stat${openAdv.length ? " alert" : ""}"><b>${peso(openAdv.reduce((a, r) => a + unappliedOf(r), 0))}</b><span>Advances not yet invoiced (${openAdv.length})</span></div></div>
+  <div class="stats"><div class="stat"><b>${peso(brReceipts.reduce((a, r) => a + r.amount, 0))}</b><span>Total received</span></div><div class="stat${openAdv.length ? " alert" : ""}"><b>${peso(openAdv.reduce((a, r) => a + unappliedOf(r), 0))}</b><span>Advances not yet invoiced (${openAdv.length})</span></div></div>
   <div class="seg" role="radiogroup" aria-label="Filter" style="margin-bottom:12px"><label><input type="radio" name="rf" data-rf="all"${rFilter === "all" ? " checked" : ""}>All receipts</label><label><input type="radio" name="rf" data-rf="adv"${rFilter === "adv" ? " checked" : ""}>Advances not yet invoiced</label></div>
   ${
     list.length
@@ -5483,7 +5562,16 @@ function doImport() {
       reorder: +(r.reorder || 0),
     };
     if (r.status === "UPDATE") {
-      Object.assign(itemById(r.exId), vals);
+      const ex = itemById(r.exId);
+      if (
+        ex &&
+        ex.type !== vals.type &&
+        (movesOf(ex.id).length > 0 ||
+          invoices.some((i) => i.items.some((it) => it.sku === ex.sku)))
+      ) {
+        delete vals.type;
+      }
+      Object.assign(ex, vals);
       u++;
     } else {
       ITEMS.push({
@@ -5973,7 +6061,18 @@ function saveItem() {
     return render();
   }
   if (f.id) {
-    Object.assign(itemById(f.id), {
+    const existing = itemById(f.id);
+    if (
+      existing &&
+      existing.type !== f.type &&
+      (movesOf(f.id).length > 0 ||
+        invoices.some((i) => i.items.some((it) => it.sku === existing.sku)))
+    ) {
+      f.err =
+        "Cannot change item type (Goods/Services) once it has stock or invoice history.";
+      return render();
+    }
+    Object.assign(existing, {
       category: (f.category || "").trim(),
       branchPrices: { ...(f.branchPrices || {}) },
       cov: { ...(f.cov || {}) },
@@ -6905,7 +7004,7 @@ function portalReview() {
   const pend = portalSubs.filter((x) => x.status === "PENDING"),
     url = location.href.split("#")[0] + "#portal",
     mgr = can("master");
-  return `<div class="panel" style="margin-bottom:14px"><div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center"><div data-qr="${esc(url)}" style="width:96px;height:96px"></div><div style="flex:1;min-width:240px"><h2 style="margin:0 0 4px">Client information form</h2><p class="hint" style="margin:0 0 6px">Send this link or QR code to new clients. They enter their registered details and upload their BIR Form 2303; you review before they become customers.</p><code style="font-size:12.5px;word-break:break-all">${esc(url)}</code></div></div></div>
+  return `<div class="panel" style="margin-bottom:14px"><div style="display:flex;gap:20px;align-items:center"><div style="width:108px;height:108px;flex-shrink:0;background:#fff;padding:6px;border:1px solid var(--line);border-radius:8px;box-sizing:border-box;display:flex;align-items:center;justify-content:center"><div data-qr="${esc(url)}" style="width:96px;height:96px"></div></div><div style="flex:1;min-width:0"><h2 style="margin:0 0 6px">Client information form</h2><p class="hint" style="margin:0 0 8px">Send this link or QR code to new clients. They enter their registered details and upload their BIR Form 2303; you review before they become customers.</p><code style="font-size:12.5px;word-break:break-all">${esc(url)}</code></div></div></div>
   ${
     pend.length
       ? `<h2>Waiting for review (${pend.length})</h2><div class="tablewrap" style="margin-bottom:16px"><table style="min-width:860px"><thead><tr><th>Ref.</th><th>Received</th><th>Registered name</th><th>TIN or country</th><th>Email</th><th>2303</th><th></th></tr></thead><tbody>${pend
@@ -7503,6 +7602,15 @@ function kNew() {
 function kSync() {
   if (!draft) return;
   draft.items = kRows.filter((r) => r.sku && Number(r.qty) > 0);
+  draft.buyerSnapshot = {
+    name: kBuyer.name,
+    tin: kBuyer.vatStatus === "FOREIGN" ? "" : kBuyer.tin,
+    address: kBuyer.address || "",
+    email: kBuyer.email || "",
+    vatStatus: kBuyer.vatStatus,
+    country: kBuyer.country || "",
+    foreignTaxId: kBuyer.foreignTaxId || "",
+  };
   let t = CUSTOMERS.find((c) => c.id === "ktemp");
   const known = CUSTOMERS.find(
     (c) =>
@@ -7540,6 +7648,7 @@ function kSync() {
       email: kBuyer.email || "",
       vatStatus: kBuyer.vatStatus,
       country: kBuyer.country || "",
+      foreignTaxId: kBuyer.foreignTaxId || "",
     });
     draft.customerId = "ktemp";
   }
@@ -10832,6 +10941,8 @@ document.addEventListener("input", (e) => {
       : el.value;
     document.getElementById("coBox").innerHTML =
       `${esc(S.name)}<br>${S.vat ? "VAT" : "Non-VAT"} reg. TIN ${esc(S.tin)}`;
+    const hCo = document.getElementById("headerCompanyBox");
+    if (hCo) hCo.innerHTML = `<b>${esc(S.name)}</b> &bull; ${S.vat ? "VAT" : "Non-VAT"} reg. TIN ${esc(S.tin)}${S.ptiNo ? ` &bull; PTI: ${esc(S.ptiNo)}` : ""}`;
     return;
   }
   if (el.dataset.rf) {
@@ -11012,7 +11123,7 @@ document.addEventListener("input", (e) => {
   }
   if (f === "salesType") {
     draft.salesType = el.value;
-    refreshEditor();
+    render();
     return;
   }
   if (f === "nature") {

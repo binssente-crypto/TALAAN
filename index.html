@@ -60,7 +60,7 @@
     </div>
 
     <div class="nav-overlay noprint" id="navOverlay"></div>
-    <header class="app-header noprint" id="appHeader" style="display:none">
+    <header class="app-header noprint" id="appHeader">
       <div class="header-left">
         <div class="header-brand">
           <span class="header-logo">Talaan</span>
@@ -142,7 +142,7 @@
               ><span class="nav-label">Invoices</span></span
             ><span class="count" id="navCount" hidden></span>
           </button>
-          <button class="navbtn nav-sub" data-go="new">
+          <button class="navbtn nav-sub" data-parent="list" data-go="new">
             <span class="nav-content"
               ><span class="nav-icon"
                 ><svg
@@ -164,7 +164,7 @@
               ><span class="nav-label">+ New invoice</span></span
             >
           </button>
-          <button class="navbtn nav-sub" data-go="tally">
+          <button class="navbtn nav-sub" data-parent="list" data-go="tally">
             <span class="nav-content"
               ><span class="nav-icon"
                 ><svg
@@ -183,7 +183,7 @@
               ><span class="nav-label">Small sales tally</span></span
             >
           </button>
-          <button class="navbtn nav-sub" data-go="register">
+          <button class="navbtn nav-sub" data-parent="list" data-go="register">
             <span class="nav-content"
               ><span class="nav-icon"
                 ><svg
@@ -275,7 +275,7 @@
               ><span class="nav-label">Receipts register</span></span
             >
           </button>
-          <button class="navbtn nav-sub" data-go="aging">
+          <button class="navbtn nav-sub" data-parent="receipts" data-go="aging">
             <span class="nav-content"
               ><span class="nav-icon"
                 ><svg
@@ -339,7 +339,7 @@
               ><span class="nav-label">Products and stock</span></span
             >
           </button>
-          <button class="navbtn nav-sub" data-go="fx">
+          <button class="navbtn nav-sub" data-parent="products" data-go="fx">
             <span class="nav-content"
               ><span class="nav-icon"
                 ><svg
@@ -384,25 +384,7 @@
               ><span class="nav-label">Transmission log</span></span
             >
           </button>
-          <button class="navbtn" data-go="verify">
-            <span class="nav-content"
-              ><span class="nav-icon"
-                ><svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <circle cx="11" cy="11" r="8"></circle>
-                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></span
-              ><span class="nav-label">Verify a document</span></span
-            >
-          </button>
-          <button class="navbtn nav-sub" data-go="ready">
+          <button class="navbtn nav-sub" data-parent="log" data-go="ready">
             <span class="nav-content"
               ><span class="nav-icon"
                 ><svg
@@ -423,7 +405,7 @@
               ><span class="nav-label">RMC 98-2026 readiness</span></span
             >
           </button>
-          <button class="navbtn nav-sub" data-go="acct">
+          <button class="navbtn nav-sub" data-parent="log" data-go="acct">
             <span class="nav-content"
               ><span class="nav-icon"
                 ><svg
@@ -440,6 +422,24 @@
                   <polyline points="7 10 12 15 17 10"></polyline>
                   <line x1="12" y1="15" x2="12" y2="3"></line></svg></span
               ><span class="nav-label">Accounting export</span></span
+            >
+          </button>
+          <button class="navbtn" data-go="verify">
+            <span class="nav-content"
+              ><span class="nav-icon"
+                ><svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></span
+              ><span class="nav-label">Verify a document</span></span
             >
           </button>
         </div>
@@ -471,7 +471,7 @@
               ><span class="nav-label">Company &amp; permits</span></span
             >
           </button>
-          <button class="navbtn nav-sub" data-go="branches">
+          <button class="navbtn nav-sub" data-parent="settings" data-go="branches">
             <span class="nav-content"
               ><span class="nav-icon"
                 ><svg
@@ -489,7 +489,7 @@
               ><span class="nav-label">Branches</span></span
             >
           </button>
-          <button class="navbtn nav-sub" data-go="users">
+          <button class="navbtn nav-sub" data-parent="settings" data-go="users">
             <span class="nav-content"
               ><span class="nav-icon"
                 ><svg
@@ -508,7 +508,7 @@
               ><span class="nav-label">Users &amp; security</span></span
             >
           </button>
-          <button class="navbtn nav-sub" data-go="design">
+          <button class="navbtn nav-sub" data-parent="settings" data-go="design">
             <span class="nav-content"
               ><span class="nav-icon"
                 ><svg
@@ -530,6 +530,7 @@
           </button>
           <button
             class="navbtn nav-sub"
+            data-parent="settings"
             data-go="provider"
             style="
               margin-top: 6px;

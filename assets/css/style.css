@@ -392,13 +392,17 @@ nav.side {
   opacity: 0.85;
 }
 .navbtn.nav-sub {
-  padding-left: 22px;
+  padding-left: 24px;
   font-size: 13px;
 }
 .navbtn.nav-sub .nav-icon {
   width: 16px;
   height: 16px;
   opacity: 0.85;
+}
+.navbtn[aria-expanded="true"] {
+  font-weight: 600;
+  color: var(--ink);
 }
 main {
   padding: 28px clamp(16px, 3vw, 40px);
@@ -1183,6 +1187,25 @@ pre {
 .paper .qr img {
   width: 64px !important;
   height: 64px !important;
+}
+[data-qr] {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+[data-qr] canvas,
+[data-qr] img {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: contain;
+}
+[data-qr] canvas[style*="display: none"],
+[data-qr] img[style*="display: none"] {
+  display: none !important;
 }
 .dl {
   list-style: none;
