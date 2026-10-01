@@ -1619,6 +1619,7 @@ function creditTotal(no) {
   return creditsOf(no).reduce((a, c) => a + cnCalc(c).due, 0);
 }
 function isCancelled(inv) {
+  if (!inv || !Array.isArray(inv.items) || inv.items.length === 0) return false;
   return inv.items.every((it, k) => creditedOnLine(inv.no, k) >= lineNet(it));
 }
 
@@ -1816,6 +1817,7 @@ function collPill(inv) {
           : '<span class="pill s-draft">Unpaid</span>');
 }
 function delivered(inv) {
+  if (!inv) return false;
   return (inv.deliveries || []).some(
     (d) => d.via !== "Printed copy" && d.status !== "failed" && d.status !== "sending",
   );
@@ -12076,7 +12078,10 @@ async function syncWithDb() {
     if (data.ok && data.dbConnected) {
       isDbConnected = true;
       if (Array.isArray(data.invoices) && data.invoices.length > 0) {
-        invoices = data.invoices;
+        data.invoices.forEach((inv) => {
+          if (inv && !Array.isArray(inv.items)) inv.items = [];
+        });
+        invoices = data.invoices.filter((i) => i && typeof i === "object" && typeof i.no === "number");
       }
       if (Array.isArray(data.credits) && data.credits.length > 0) credits = data.credits;
       if (Array.isArray(data.receipts) && data.receipts.length > 0) receipts = data.receipts;

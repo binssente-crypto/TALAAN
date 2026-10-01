@@ -151,9 +151,13 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({
         ok: true,
         dbConnected: true,
-        invoices: invRows.map((r) =>
-          typeof r.doc_data === "string" ? JSON.parse(r.doc_data) : r.doc_data,
-        ),
+        invoices: invRows
+          .map((r) => {
+            const doc = typeof r.doc_data === "string" ? JSON.parse(r.doc_data) : r.doc_data;
+            if (doc && !Array.isArray(doc.items)) doc.items = [];
+            return doc;
+          })
+          .filter(Boolean),
         credits: cmRows.map((r) =>
           typeof r.doc_data === "string" ? JSON.parse(r.doc_data) : r.doc_data,
         ),
