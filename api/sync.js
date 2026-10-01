@@ -9,10 +9,13 @@ function getPool() {
 
   // Clean URI of parameters that mysql2 doesn't accept in URI query string
   const cleanUri = rawUri.replace(/\?ssl-mode=.*$/, "").replace(/\?ssl=.*$/, "");
+  const sslConfig = process.env.MYSQL_CA
+    ? { ca: process.env.MYSQL_CA, rejectUnauthorized: true }
+    : { rejectUnauthorized: false };
 
   pool = mysql.createPool({
     uri: cleanUri,
-    ssl: { rejectUnauthorized: false },
+    ssl: sslConfig,
     waitForConnections: true,
     connectionLimit: 5,
     maxIdle: 3,
@@ -96,7 +99,8 @@ module.exports = async function handler(req, res) {
   res.setHeader("Content-Type", "application/json");
 
   // CORS headers
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  const origin = req.headers.origin;
+  res.setHeader("Access-Control-Allow-Origin", origin || "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 

@@ -4,7 +4,7 @@
   "private": true,
   "description": "Talaan Electronic Invoice System",
   "scripts": {
-    "start": "node api/sync.js"
+    "dev": "vercel dev"
   },
   "dependencies": {
     "mysql2": "^3.12.0"

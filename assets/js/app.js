@@ -2970,7 +2970,6 @@ function issue() {
       d.deliveries.push({ via: "Email (automatic)", to: cu.email, at: now() });
   }
   delete d.adv;
-  postDbSync("save_invoice", d);
   draft = null;
   slog(
     "Issued invoice",
@@ -2978,7 +2977,10 @@ function issue() {
   );
   toast(`E-invoice ${d.no} issued. Send it to the buyer.`);
   go("detail", d.no);
-  signDoc(d, "INV").then(render);
+  signDoc(d, "INV").then(() => {
+    postDbSync("save_invoice", d);
+    render();
+  });
 }
 
 /* ================= Invoice detail ================= */
@@ -3549,12 +3551,14 @@ function approveReq(r, note) {
       reqId: r.id,
     };
   credits.push(cn);
-  postDbSync("save_credit", cn);
   slog(
     "Approved credit memo",
     `${r.id} issued as Credit Memo No. ${cn.no}, ${peso(cnCalc(cn).due)}`,
   );
-  signDoc(cn, "CM").then(render);
+  signDoc(cn, "CM").then(() => {
+    postDbSync("save_credit", cn);
+    render();
+  });
   r.status = "APPROVED";
   r.cnNo = cn.no;
   r.history.push({
@@ -11532,20 +11536,33 @@ async function syncWithDb() {
   if (typeof fetch === "undefined") return;
   try {
     const res = await fetch("/api/sync");
-    if (!res.ok) return;
+    if (!res.ok) {
+      isDbConnected = false;
+      render();
+      return;
+    }
     const data = await res.json();
     if (data.ok && data.dbConnected) {
       isDbConnected = true;
-      if (data.invoices && data.invoices.length > 0) {
+      if (Array.isArray(data.invoices) && data.invoices.length > 0) {
         invoices = data.invoices;
-        if (data.credits && data.credits.length > 0) credits = data.credits;
-        if (data.receipts && data.receipts.length > 0) receipts = data.receipts;
-        if (data.secLog && data.secLog.length > 0) secLog = data.secLog;
+        if (Array.isArray(data.credits)) credits = data.credits;
+        if (Array.isArray(data.receipts)) receipts = data.receipts;
+        if (Array.isArray(data.secLog)) secLog = data.secLog;
+        [...invoices, ...receipts].forEach((x) => {
+          if (!x.buyer && x.customerId) x.buyer = snap(x.customerId);
+        });
       } else {
         postDbSync("seed_all", { invoices, credits, receipts, settings: S });
       }
       render();
+    } else {
+      isDbConnected = false;
+      render();
     }
-  } catch (e) {}
+  } catch (e) {
+    isDbConnected = false;
+    render();
+  }
 }
 syncWithDb();

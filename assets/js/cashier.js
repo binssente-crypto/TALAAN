@@ -1066,13 +1066,6 @@ function issue() {
   });
   db.invoices.push(d);
   save();
-  if (typeof fetch !== "undefined") {
-    fetch("/api/sync", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "save_invoice", data: d }),
-    }).catch(() => {});
-  }
   view = d;
   inv = null;
   render();
