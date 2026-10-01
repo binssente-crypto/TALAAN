@@ -2567,6 +2567,19 @@ function renderCore() {
     }
   }
   if (view === "new" && !draft) draft = newDraft();
+  if (
+    (view === "detail" && (!current || !invOf(+current))) ||
+    (view === "receipt" &&
+      (!current || !receipts.find((r) => r.no === +current))) ||
+    (view === "credit" && (!current || !credits.find((c) => c.no === +current)))
+  ) {
+    view = "list";
+    current = null;
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("talaan_view", "list");
+      localStorage.removeItem("talaan_cur");
+    }
+  }
   {
     const dbr = docBranchOfView();
     if (dbr && !canBranch(dbr)) {
@@ -11603,9 +11616,38 @@ async function syncWithDb() {
         if (Array.isArray(data.credits)) credits = data.credits;
         if (Array.isArray(data.receipts)) receipts = data.receipts;
         if (Array.isArray(data.secLog)) secLog = data.secLog;
+        if (data.settings && typeof data.settings === "object") {
+          Object.assign(S, data.settings);
+        }
         [...invoices, ...receipts].forEach((x) => {
           if (!x.buyer && x.customerId) x.buyer = snap(x.customerId);
         });
+        BRS.forEach((b) => {
+          const brInvs = invoices.filter(
+            (i) => (i.branch || "00000") === b.code && typeof i.no === "number",
+          );
+          if (brInvs.length > 0) {
+            b.next.inv = Math.max(...brInvs.map((i) => i.no)) + 1;
+          }
+          const brCns = credits.filter(
+            (c) =>
+              (c.branch ||
+                (invOf(c.invNo) && invOf(c.invNo).branch) ||
+                "00000") === b.code && typeof c.no === "number",
+          );
+          if (brCns.length > 0) {
+            b.next.cn = Math.max(...brCns.map((c) => c.no)) + 1;
+          }
+          const brPrs = receipts.filter(
+            (r) => (r.branch || "00000") === b.code && typeof r.no === "number",
+          );
+          if (brPrs.length > 0) {
+            b.next.pr = Math.max(...brPrs.map((r) => r.no)) + 1;
+          }
+        });
+        if (!SIGN.ready) await initSigning();
+        for (const i of invoices) await signDoc(i, "INV");
+        for (const c of credits) await signDoc(c, "CM");
       } else {
         postDbSync("seed_all", { invoices, credits, receipts, settings: S });
       }
