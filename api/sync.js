@@ -154,7 +154,11 @@ module.exports = async function handler(req, res) {
         invoices: invRows
           .map((r) => {
             const doc = typeof r.doc_data === "string" ? JSON.parse(r.doc_data) : r.doc_data;
-            if (doc && !Array.isArray(doc.items)) doc.items = [];
+            if (doc) {
+              if (!Array.isArray(doc.items)) doc.items = [];
+              if (!doc.refs || typeof doc.refs !== "object") doc.refs = {};
+              if (!Array.isArray(doc.deliveries)) doc.deliveries = [];
+            }
             return doc;
           })
           .filter(Boolean),

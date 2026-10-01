@@ -1817,9 +1817,9 @@ function collPill(inv) {
           : '<span class="pill s-draft">Unpaid</span>');
 }
 function delivered(inv) {
-  if (!inv) return false;
-  return (inv.deliveries || []).some(
-    (d) => d.via !== "Printed copy" && d.status !== "failed" && d.status !== "sending",
+  if (!inv || !Array.isArray(inv.deliveries)) return false;
+  return inv.deliveries.some(
+    (d) => d && d.via !== "Printed copy" && d.status !== "failed" && d.status !== "sending",
   );
 }
 function rStatus(r) {
@@ -2009,9 +2009,9 @@ function checks(inv) {
       "Statutory discounts are applied on peso sales only",
     ]);
   }
-  if (inv.refs.manual)
+  if (inv.refs && inv.refs.manual)
     out.push([
-      !!(inv.refs.manual.no.trim() && inv.refs.manual.date),
+      !!((inv.refs.manual.no || "").trim() && inv.refs.manual.date),
       "Manual invoice no. and date entered",
     ]);
   if (inv.adv && Object.keys(inv.adv).length) {
@@ -2073,7 +2073,7 @@ function advisoriesBase(inv) {
         "Buyer's TIN is shown, so the buyer can claim the input VAT even though the sale is below ₱1,000.",
       );
   } else {
-    if (toPHP(inv, t) < 50000 && !inv.refs.aggregate)
+    if (toPHP(inv, t) < 50000 && !(inv.refs && inv.refs.aggregate))
       out.push(
         `Non-VAT sale below ₱500: an invoice is required only if the buyer asks, or once the day's small sales reach ₱500.${t > 0 ? ' <button class="btn link" data-act="totally">Record it in today\'s small sales tally instead</button>' : ""}`,
       );
@@ -2081,7 +2081,7 @@ function advisoriesBase(inv) {
       "Non-VAT invoice: prints “This document is not valid for claim of input tax.”",
     );
   }
-  if (inv.txnDate && inv.txnDate < todayISO() && !inv.refs.manual)
+  if (inv.txnDate && inv.txnDate < todayISO() && !(inv.refs && inv.refs.manual))
     out.push(
       `The date of transaction (${isoDate(inv.txnDate)}) is earlier than today. The invoice should be issued on the date of transaction; late issuance may be treated as failure to issue on time.`,
     );
@@ -2901,7 +2901,7 @@ function vList() {
     .sort((a, b) => b.issuedAt - a.issuedAt)
     .map(
       (i) =>
-        `<tr class="row" data-open="${i.no}" tabindex="0"><td><strong>${i.no}</strong>${i.refs.manual ? ' <span class="due">(replaces manual)</span>' : ""}</td><td>${esc(brOf(i.branch).name)}<br><span class="due">${i.branch}</span></td><td>${fmtDate(i.issuedAt)}</td><td>${esc((i.buyer || cust(i.customerId)).name)}</td><td><span class="pill fmt">${formatOf(i)}</span> ${i.salesType === "CASH" ? "Cash" : "Charge"}</td><td class="num">${money(i, calc(i).due)}${isFX(i) ? `<br><span class="due">${peso(toPHP(i, calc(i).due))}</span>` : ""}${creditsOf(i.no).length ? `<br><span class="due">less CM ${money(i, creditTotal(i.no))}</span>` : ""}</td><td>${delivered(i) ? '<span class="pill s-paid">Sent</span>' : isCancelled(i) ? "—" : '<span class="pill s-pending">Not yet</span>'}</td><td>${collPill(i)}</td><td>${reportPill(i)} ${dueInfo(i)}</td></tr>`,
+        `<tr class="row" data-open="${i.no}" tabindex="0"><td><strong>${i.no}</strong>${(i.refs && i.refs.manual) ? ' <span class="due">(replaces manual)</span>' : ""}</td><td>${esc(brOf(i.branch).name)}<br><span class="due">${i.branch}</span></td><td>${fmtDate(i.issuedAt)}</td><td>${esc((i.buyer || cust(i.customerId)).name)}</td><td><span class="pill fmt">${formatOf(i)}</span> ${i.salesType === "CASH" ? "Cash" : "Charge"}</td><td class="num">${money(i, calc(i).due)}${isFX(i) ? `<br><span class="due">${peso(toPHP(i, calc(i).due))}</span>` : ""}${creditsOf(i.no).length ? `<br><span class="due">less CM ${money(i, creditTotal(i.no))}</span>` : ""}</td><td>${delivered(i) ? '<span class="pill s-paid">Sent</span>' : isCancelled(i) ? "—" : '<span class="pill s-pending">Not yet</span>'}</td><td>${collPill(i)}</td><td>${reportPill(i)} ${dueInfo(i)}</td></tr>`,
     )
     .join("")}
   </tbody></table></div>
@@ -3378,7 +3378,7 @@ function vDetail() {
     cancelled = isCancelled(i),
     b = cust(i.customerId);
   const later = invoices.filter(
-    (x) => x.refs.reissueOf === i.no || x.refs.addlFor === i.no,
+    (x) => (x.refs && x.refs.reissueOf === i.no) || (x.refs && x.refs.addlFor === i.no),
   );
   return `<div class="head noprint"><div><h1>Invoice No. ${i.no}</h1><p class="sub">Issued ${fmtDate(i.issuedAt)}. Locked: issued e-invoices cannot be edited or deleted. Seller, buyer, design and permit details are frozen as issued.</p></div>
   <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-go="list">Back to invoices</button><button class="btn" data-act="print">Print copy for buyer</button><button class="btn" data-act="download-pdf"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download PDF</button>
@@ -3436,7 +3436,7 @@ function vDetail() {
        )
        .join(
          "",
-       )}${cn.length || later.length ? `<ul class="dl">${cn.map((x) => `<li><button class="btn link" data-opencn="${x.no}">Credit Memo No. ${x.no}</button> ${esc(x.reason)}<br><span class="due">${dDate(x.at)}, ${peso(cnCalc(x).due)} credited</span></li>`).join("")}${later.map((x) => `<li><button class="btn link" data-open="${x.no}">Invoice No. ${x.no}</button> ${x.refs.reissueOf ? "replacement invoice" : "additional billing"}<br><span class="due">${dDate(x.issuedAt)}, ${peso(calc(x).due)}</span></li>`).join("")}</ul>` : `<p class="due" style="margin:0 0 10px">No adjustments.</p>`}
+       )}${cn.length || later.length ? `<ul class="dl">${cn.map((x) => `<li><button class="btn link" data-opencn="${x.no}">Credit Memo No. ${x.no}</button> ${esc(x.reason)}<br><span class="due">${dDate(x.at)}, ${peso(cnCalc(x).due)} credited</span></li>`).join("")}${later.map((x) => `<li><button class="btn link" data-open="${x.no}">Invoice No. ${x.no}</button> ${(x.refs && x.refs.reissueOf) ? "replacement invoice" : "additional billing"}<br><span class="due">${dDate(x.issuedAt)}, ${peso(calc(x).due)}</span></li>`).join("")}</ul>` : `<p class="due" style="margin:0 0 10px">No adjustments.</p>`}
      ${cancelled || me().roleCode === "AUDITOR" ? "" : `<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="cm" data-no="${i.no}">Issue credit memo</button><button class="btn" data-act="addl" data-no="${i.no}">Bill additional amount</button><button class="btn" data-act="reissue" data-no="${i.no}">Cancel and reissue</button><button class="btn" data-act="crnew" data-no="${i.no}">Correct buyer details</button></div>`}
      <p class="hint">Decrease: credit memo. Increase: new e-invoice. Both reference this invoice.</p></div>
     <div class="panel"><h2>Collection</h2>${collPanel(i, c)}</div>
@@ -3668,7 +3668,7 @@ function vCredits() {
 function vCredit() {
   const x = credits.find((c) => c.no === current),
     inv = invOf(x.invNo),
-    re = invoices.find((i) => i.refs.cancelledBy === x.no);
+    re = invoices.find((i) => i.refs && i.refs.cancelledBy === x.no);
   return `<div class="head noprint"><div><h1>Credit Memo No. ${x.no}</h1><p class="sub">${esc(x.reason)}, issued ${fmtDate(x.at)}</p></div>
   <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-go="credits">Back to credit memos</button><button class="btn" data-open="${inv.no}">View Invoice No. ${inv.no}</button><button class="btn" data-act="print">Print</button></div></div>
   <div class="grid2"><div>${docCredit(x)}</div><div class="stack noprint">
@@ -4179,7 +4179,7 @@ function vReady() {
   const act = invoices.filter((i) => !isCancelled(i)),
     notSent = act.filter((i) => !delivered(i)),
     certDue = addMonths(S.ptiDate, 6),
-    manual = invoices.filter((i) => i.refs.manual).length;
+    manual = invoices.filter((i) => i.refs && i.refs.manual).length;
   const days = Math.ceil((MANDATE - now()) / DAY);
   const items = [
     [
@@ -6718,7 +6718,7 @@ function statusOf(doc, kind) {
       : "";
   const cn = creditsOf(doc.no),
     add = invoices.filter(
-      (x) => x.refs.addlFor === doc.no || x.refs.reissueOf === doc.no,
+      (x) => x.refs && (x.refs.addlFor === doc.no || x.refs.reissueOf === doc.no),
     );
   if (isCancelled(doc))
     return {
@@ -12023,6 +12023,10 @@ receipts.forEach((r) => (r.branch = r.branch || "00000"));
 stockDocs.forEach((d) => (d.branch = d.branch || "00000"));
 stockDocs.forEach((d) => (d.branch = d.branch || "00000"));
 [...invoices, ...credits, ...receipts].forEach((x) => {
+  if (x) {
+    if (!x.refs || typeof x.refs !== "object") x.refs = {};
+    if (!Array.isArray(x.deliveries)) x.deliveries = [];
+  }
   x.designV = 1;
   x.seller = sellerSnap(
     x.branch || (x.invNo && invOf(x.invNo).branch) || "00000",
@@ -12079,7 +12083,10 @@ async function syncWithDb() {
       isDbConnected = true;
       if (Array.isArray(data.invoices) && data.invoices.length > 0) {
         data.invoices.forEach((inv) => {
-          if (inv && !Array.isArray(inv.items)) inv.items = [];
+          if (!inv) return;
+          if (!Array.isArray(inv.items)) inv.items = [];
+          if (!inv.refs || typeof inv.refs !== "object") inv.refs = {};
+          if (!Array.isArray(inv.deliveries)) inv.deliveries = [];
         });
         invoices = data.invoices.filter((i) => i && typeof i === "object" && typeof i.no === "number");
       }
