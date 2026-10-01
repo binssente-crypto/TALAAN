@@ -7,3 +7,7 @@ eis_out/
 keys/
 tools/eis_out/
 tools/keys/
+.env
+.env*.local
+.env.*
+node_modules/

@@ -897,13 +897,25 @@ function can(p) {
   const u = me();
   return !!u && ROLES[u.roleCode].perms.includes(p);
 }
+let isDbConnected = false;
+function postDbSync(action, data) {
+  if (typeof fetch !== "undefined") {
+    fetch("/api/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, data }),
+    }).catch(() => {});
+  }
+}
 function slog(event, detail, u) {
-  secLog.push({
+  const item = {
     at: now(),
     user: u ? u.name : me() ? me().name : "—",
     event,
     detail: detail || "",
-  });
+  };
+  secLog.push(item);
+  postDbSync("log_security", item);
 }
 function deny(p) {
   const u = me();
@@ -2547,6 +2559,7 @@ function renderCore() {
     `<div class="me"><b>${esc(me().name)}</b>${esc(me().position)}<br><span class="due">${esc(ROLES[me().roleCode].label)}${me().mfa ? ", two-factor on" : ""}</span></div>
    ${me().branch === "ALL" ? `<label for="vbr" style="font-size:12px;margin-top:8px">Branch</label><select id="vbr" data-vbr="1">${[["ALL", "All branches (view only)"], ...BRS.filter((b) => b.active).map((b) => [b.code, brLabel(b.code)])].map(([v, l]) => `<option value="${v}"${viewBr === v ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>` : `<div class="due" style="margin-top:6px">Branch: ${esc(brLabel(me().branch))}</div>`}
    <div class="due" style="margin-top:6px;font-size:12px">Philippine Standard Time<br><span data-phclock="1">${phNow()}</span></div>
+   <div class="due" style="margin-top:6px;font-size:12px">Database: <span style="color:${isDbConnected ? "var(--good, #12B76A)" : "#98A2B3"}">●</span> ${isDbConnected ? "Aiven MySQL 8.4" : "Local session"}</div>
    ${can("counter") ? `<button class="btn" style="margin-top:8px;width:100%" data-act="kmode">Switch to cashier counter</button>` : ""}<button class="btn link" data-act="signout">Sign out</button>`;
   document.getElementById("coBox").innerHTML =
     `${esc(S.name)}<br>${S.vat ? "VAT" : "Non-VAT"} reg. TIN ${esc(S.tin)}`;
@@ -2957,6 +2970,7 @@ function issue() {
       d.deliveries.push({ via: "Email (automatic)", to: cu.email, at: now() });
   }
   delete d.adv;
+  postDbSync("save_invoice", d);
   draft = null;
   slog(
     "Issued invoice",
@@ -3535,6 +3549,7 @@ function approveReq(r, note) {
       reqId: r.id,
     };
   credits.push(cn);
+  postDbSync("save_credit", cn);
   slog(
     "Approved credit memo",
     `${r.id} issued as Credit Memo No. ${cn.no}, ${peso(cnCalc(cn).due)}`,
@@ -3784,6 +3799,7 @@ function issueReceipt() {
       l.fxGain = Math.round(l.amount * rfx.rate) - toPHP(inv, l.amount);
     });
   receipts.push(r);
+  postDbSync("save_receipt", r);
   draftR = null;
   toast(`Collection receipt No. ${r.no} issued`);
   go("receipt", r.no);
@@ -11512,3 +11528,24 @@ initSigning().then(async () => {
   for (const c of credits) await signDoc(c, "CM");
   render();
 });
+async function syncWithDb() {
+  if (typeof fetch === "undefined") return;
+  try {
+    const res = await fetch("/api/sync");
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.ok && data.dbConnected) {
+      isDbConnected = true;
+      if (data.invoices && data.invoices.length > 0) {
+        invoices = data.invoices;
+        if (data.credits && data.credits.length > 0) credits = data.credits;
+        if (data.receipts && data.receipts.length > 0) receipts = data.receipts;
+        if (data.secLog && data.secLog.length > 0) secLog = data.secLog;
+      } else {
+        postDbSync("seed_all", { invoices, credits, receipts, settings: S });
+      }
+      render();
+    }
+  } catch (e) {}
+}
+syncWithDb();

@@ -1,0 +1,12 @@
+{
+  "name": "talaan-electronic-invoice",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Talaan Electronic Invoice System",
+  "scripts": {
+    "start": "node api/sync.js"
+  },
+  "dependencies": {
+    "mysql2": "^3.12.0"
+  }
+}

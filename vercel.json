@@ -6,7 +6,7 @@
       "destination": "/cashier.html"
     },
     {
-      "source": "/((?!assets/|docs/).*)",
+      "source": "/((?!assets/|docs/|api/).*)",
       "destination": "/index.html"
     }
   ]
