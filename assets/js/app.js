@@ -931,7 +931,10 @@ function deny(p) {
 function need(p) {
   return can(p) || deny(p);
 }
-let userId = null;
+let userId =
+  (typeof localStorage !== "undefined" &&
+    localStorage.getItem("talaan_uid")) ||
+  null;
 const me = () => USERS.find((u) => u.id === userId);
 const who = (u) => ({ id: u.id, name: u.name, role: u.role });
 function canView(v) {
@@ -1058,8 +1061,16 @@ let log = invoices
 let draft = null,
   draftR = null,
   draftC = null,
-  view = "list",
-  current = null,
+  view =
+    (typeof localStorage !== "undefined" &&
+      localStorage.getItem("talaan_view")) ||
+    "list",
+  current =
+    typeof localStorage !== "undefined" && localStorage.getItem("talaan_cur")
+      ? isNaN(+localStorage.getItem("talaan_cur"))
+        ? localStorage.getItem("talaan_cur")
+        : +localStorage.getItem("talaan_cur")
+      : null,
   showJson = false,
   rFilter = "all";
 
@@ -2508,6 +2519,11 @@ function go(v, no) {
   if (v !== view) resetPicker();
   view = v;
   current = no ?? null;
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem("talaan_view", v);
+    if (current != null) localStorage.setItem("talaan_cur", current);
+    else localStorage.removeItem("talaan_cur");
+  }
   showJson = false;
   if (v === "new") draft = newDraft();
   render();
@@ -2545,7 +2561,12 @@ function renderCore() {
   if (!canView(view)) {
     view = "list";
     current = null;
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("talaan_view", "list");
+      localStorage.removeItem("talaan_cur");
+    }
   }
+  if (view === "new" && !draft) draft = newDraft();
   {
     const dbr = docBranchOfView();
     if (dbr && !canBranch(dbr)) {
@@ -6863,7 +6884,13 @@ function pwStrong(p) {
 }
 function finishLogin(u) {
   userId = u.id;
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem("talaan_uid", u.id);
+  }
   uiMode = u.roleCode === "CASHIER" ? "counter" : "full";
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem("talaan_uimode", uiMode);
+  }
   if (uiMode === "counter")
     setTimeout(() => {
       kNew();
@@ -6976,6 +7003,12 @@ function signOut(reason) {
       u,
     );
   userId = null;
+  if (typeof localStorage !== "undefined") {
+    localStorage.removeItem("talaan_uid");
+    localStorage.removeItem("talaan_view");
+    localStorage.removeItem("talaan_cur");
+    localStorage.removeItem("talaan_uimode");
+  }
   draft = null;
   draftR = null;
   draftC = null;
@@ -7358,7 +7391,10 @@ function vFX() {
 /* ================= Cashier counter (encode directly on the invoice) ================= */
 let kHist = { from: "", to: "", q: "" },
   kReprint = false,
-  uiMode = "full",
+  uiMode =
+    (typeof localStorage !== "undefined" &&
+      localStorage.getItem("talaan_uimode")) ||
+    "full",
   kRows = [],
   kBuyer = null,
   kTender = "",
@@ -8110,6 +8146,9 @@ function kHandle(e) {
       return true;
     }
     uiMode = "full";
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("talaan_uimode", "full");
+    }
     const t2 = CUSTOMERS.findIndex((c) => c.id === "ktemp");
     if (t2 >= 0) CUSTOMERS.splice(t2, 1);
     draft = null;
@@ -9007,6 +9046,9 @@ document.addEventListener("click", (e) => {
   if (aa && aa.dataset.act === "kmode") {
     if (!need("counter")) return;
     uiMode = "counter";
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("talaan_uimode", "counter");
+    }
     kShift = kShift || now();
     kNew();
     render();
