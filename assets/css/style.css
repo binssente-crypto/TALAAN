@@ -311,9 +311,9 @@ nav.side {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  /* Sticky sidebar: always visible, independently scrollable */
+  /* Sticky sidebar: always visible, independently scrollable below 58px header */
   position: sticky;
-  top: 0;
+  top: 58px;
   height: calc(100vh - 58px);
   overflow-y: auto;
   overflow-x: hidden;
@@ -322,6 +322,9 @@ nav.side {
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
   transition: scrollbar-color 0.2s;
+}
+nav.side > * {
+  flex-shrink: 0;
 }
 nav.side:hover {
   scrollbar-color: color-mix(in srgb, var(--muted) 40%, transparent) transparent;
@@ -2130,7 +2133,7 @@ pre {
   align-items: flex-start;
   gap: 8px;
   margin-bottom: 12px;
-  min-height: 36px;
+  flex-shrink: 0;
 }
 .co-badge-box {
   flex: 1;
