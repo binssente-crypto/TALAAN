@@ -282,8 +282,7 @@ body:has(.app.sidebar-collapsed) .header-brand .header-tag {
 .app {
   display: grid;
   grid-template-columns: var(--sidebar-w, 260px) 1fr;
-  height: calc(100vh - 58px);
-  overflow: hidden;
+  min-height: calc(100vh - 58px);
 }
 .app.auth-mode {
   display: flex;
@@ -312,11 +311,14 @@ nav.side {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  height: 100%;
+  /* Sticky sidebar: always visible, independently scrollable */
+  position: sticky;
+  top: 0;
+  height: calc(100vh - 58px);
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
-  /* Thin scrollbar — visible only when content overflows */
+  /* Thin scrollbar — appears only on hover */
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
   transition: scrollbar-color 0.2s;
@@ -333,7 +335,6 @@ nav.side::-webkit-scrollbar-track {
 nav.side::-webkit-scrollbar-thumb {
   background: transparent;
   border-radius: 4px;
-  transition: background 0.2s;
 }
 nav.side:hover::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, var(--muted) 40%, transparent);
@@ -412,9 +413,6 @@ main {
   padding: 28px clamp(16px, 3vw, 40px);
   max-width: 1220px;
   width: 100%;
-  height: 100%;
-  overflow-y: auto;
-  overscroll-behavior: contain;
 }
 h1 {
   font-size: 24px;
@@ -1138,17 +1136,17 @@ pre {
     overflow: visible;
   }
   nav.side {
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    height: auto;
+    overflow: visible;
     flex-direction: row;
     flex-wrap: wrap;
     align-items: center;
     border-right: 0;
     border-bottom: 1px solid var(--line);
     padding: 10px 12px;
-    position: sticky;
-    top: env(safe-area-inset-top, 0px);
     z-index: 5;
-    height: auto;
-    overflow: visible;
   }
   main {
     height: auto;
