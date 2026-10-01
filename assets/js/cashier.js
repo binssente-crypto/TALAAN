@@ -223,11 +223,13 @@ function save() {}
 /* ============ Helpers ============ */
 const $ = (s) => document.querySelector(s);
 const cents = (x) => Math.round(Number(x || 0) * 100);
-const amt = (c) =>
-  (c / 100).toLocaleString("en-PH", {
+const amt = (c) => {
+  const n = Number(c || 0);
+  return (n / 100).toLocaleString("en-PH", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+};
 const peso = (c) => "₱" + amt(c);
 const esc = (s) =>
   String(s ?? "").replace(
@@ -621,7 +623,7 @@ function signinHtml() {
 function boxes(v, c, f) {
   const L = [],
     Rr = [],
-    d = (x) => (x ? amt(x) : "");
+    d = (x) => amt(x);
   if (f === "B1") {
     L.push(
       ["VATable Sales", c.vatable],

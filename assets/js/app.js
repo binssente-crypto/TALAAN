@@ -333,7 +333,8 @@ function cents(x) {
   return Math.round(Number(x || 0) * 100);
 }
 function amt(c) {
-  return (c / 100).toLocaleString("en-PH", {
+  const n = Number(c || 0);
+  return (n / 100).toLocaleString("en-PH", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
@@ -2149,7 +2150,7 @@ function footer(series, sl) {
   <div>Date issued: ${esc(new Date(S.atpDate).toLocaleDateString("en-PH", { day: "2-digit", month: "short", year: "numeric" }))}<br>Approved series: ${series}</div></div>`;
 }
 function bx(rows) {
-  return `<table class="bx">${rows.map(([l, v, b]) => `<tr${b ? ' class="tot"' : ""}><td class="lab">${l}</td><td>${v ? amt(v) : ""}</td></tr>`).join("")}</table>`;
+  return `<table class="bx">${rows.map(([l, v, b]) => `<tr${b ? ' class="tot"' : ""}><td class="lab">${l}</td><td>${amt(v)}</td></tr>`).join("")}</table>`;
 }
 /* ===== Signed QR codes (ECDSA P-256, the same algorithm family as the JWS ES256 used for EIS) ===== */
 const SIGN = { priv: null, pub: null, pubJwk: null, ready: false };
@@ -2577,6 +2578,25 @@ function go(v, no) {
   render();
   window.scrollTo(0, 0);
 }
+function renderCoBox() {
+  const coBox = document.getElementById("coBox");
+  if (!coBox) return;
+  coBox.innerHTML = `
+    <div class="co-badge-header">
+      <span class="co-badge-icon">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 21h18"></path><path d="M5 21V7l8-4v18"></path><path d="M19 21V11l-6-4"></path>
+        </svg>
+      </span>
+      <span class="co-badge-name">${esc(S.name)}</span>
+    </div>
+    <div class="co-badge-meta">
+      <span class="co-tax-pill">${S.vat ? "VAT" : "Non-VAT"}</span>
+      <span class="co-tin-text">TIN ${esc(S.tin)}</span>
+    </div>
+    ${S.ptiNo ? `<div class="co-pti-text">PTI: ${esc(S.ptiNo)}</div>` : ""}
+  `;
+}
 function render() {
   renderCore();
   renderHelp();
@@ -2647,11 +2667,7 @@ function renderCore() {
    <div class="due" style="margin-top:6px;font-size:12px">Philippine Standard Time<br><span data-phclock="1">${phNow()}</span></div>
    <div class="due" style="margin-top:6px;font-size:12px">Database: <span style="color:${isDbConnected ? "var(--good, #12B76A)" : "#98A2B3"}">●</span> ${isDbConnected ? "Aiven MySQL 8.4" : "Local session"}</div>
    ${can("counter") ? `<button class="btn" style="margin-top:8px;width:100%" data-act="kmode">Switch to cashier counter</button>` : ""}<button class="btn link" data-act="signout">Sign out</button>`;
-  document.getElementById("coBox").innerHTML =
-    `${esc(S.name)}<br>${S.vat ? "VAT" : "Non-VAT"} reg. TIN ${esc(S.tin)}`;
-
-  const hCo = document.getElementById("headerCompanyBox");
-  if (hCo) hCo.innerHTML = `<b>${esc(S.name)}</b> &bull; ${S.vat ? "VAT" : "Non-VAT"} reg. TIN ${esc(S.tin)}${S.ptiNo ? ` &bull; PTI: ${esc(S.ptiNo)}` : ""}`;
+  renderCoBox();
   const hDb = document.getElementById("headerDbStatus");
   if (hDb) hDb.innerHTML = `<span class="db-dot ${isDbConnected ? "connected" : "local"}">●</span> ${isDbConnected ? "Aiven MySQL 8.4" : "Local session"}`;
   const hBr = document.getElementById("headerBranchBox");
@@ -7609,7 +7625,6 @@ function kSync() {
     email: kBuyer.email || "",
     vatStatus: kBuyer.vatStatus,
     country: kBuyer.country || "",
-    foreignTaxId: kBuyer.foreignTaxId || "",
   };
   let t = CUSTOMERS.find((c) => c.id === "ktemp");
   const known = CUSTOMERS.find(
@@ -7648,7 +7663,6 @@ function kSync() {
       email: kBuyer.email || "",
       vatStatus: kBuyer.vatStatus,
       country: kBuyer.country || "",
-      foreignTaxId: kBuyer.foreignTaxId || "",
     });
     draft.customerId = "ktemp";
   }
@@ -7780,7 +7794,7 @@ function kPaper(c) {
     rb = rightBox(f, c),
     kind = f === "B3" ? "VAT-EXEMPT SALE" : f === "B4" ? "ZERO-RATED SALE" : "";
   const bx = (rows) =>
-    `<table class="bx">${rows.map(([l, v, t]) => `<tr${t ? ' class="tot"' : ""}><td class="lab">${l}</td><td>${v ? amt(v) : ""}</td></tr>`).join("")}</table>`;
+    `<table class="bx">${rows.map(([l, v, t]) => `<tr${t ? ' class="tot"' : ""}><td class="lab">${l}</td><td>${amt(v)}</td></tr>`).join("")}</table>`;
   const rows =
     kRows
       .map((r, k) => {
@@ -10939,10 +10953,7 @@ document.addEventListener("input", (e) => {
     ].includes(k)
       ? Number(el.value)
       : el.value;
-    document.getElementById("coBox").innerHTML =
-      `${esc(S.name)}<br>${S.vat ? "VAT" : "Non-VAT"} reg. TIN ${esc(S.tin)}`;
-    const hCo = document.getElementById("headerCompanyBox");
-    if (hCo) hCo.innerHTML = `<b>${esc(S.name)}</b> &bull; ${S.vat ? "VAT" : "Non-VAT"} reg. TIN ${esc(S.tin)}${S.ptiNo ? ` &bull; PTI: ${esc(S.ptiNo)}` : ""}`;
+    renderCoBox();
     return;
   }
   if (el.dataset.rf) {
