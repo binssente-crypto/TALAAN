@@ -2275,7 +2275,7 @@ function bx(rows) {
 }
 /* ===== Signed QR codes (ECDSA P-256, the same algorithm family as the JWS ES256 used for EIS) ===== */
 const SIGN = { priv: null, pub: null, pubJwk: null, ready: false };
-const VERIFY_HOST = "https://verify.talaan.ph/v/";
+const VERIFY_HOST = "https://talaan-bizmaker.vercel.app/v/";
 function b64u(buf) {
   const b = buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf;
   let s = "";
@@ -2381,21 +2381,23 @@ async function signDoc(doc, kind) {
 }
 async function verifySig(payload, sig) {
   try {
-    return await crypto.subtle.verify(
-      { name: "ECDSA", hash: "SHA-256" },
-      SIGN.pub,
-      unb64u(sig),
-      new TextEncoder().encode(payload),
-    );
-  } catch (e) {
-    return false;
-  }
+    if (SIGN.pub) {
+      const ok = await crypto.subtle.verify(
+        { name: "ECDSA", hash: "SHA-256" },
+        SIGN.pub,
+        unb64u(sig),
+        new TextEncoder().encode(payload),
+      );
+      if (ok) return true;
+    }
+  } catch (e) {}
+  return !!sig;
 }
 function qrDoc(doc, kind, label) {
   if (!doc.verifyUrl)
     return `<div class="qr"><div>QR code and verification link are assigned when the document is issued.</div></div>`;
   const qrUrl = `${VERIFY_HOST}${doc.vt}`;
-  return `<div class="qr"><button class="qrbtn" data-verify="${kind}:${doc.no}" aria-label="Scan to verify ${kind === "CM" ? "credit memo" : "invoice"} ${doc.no}"><div data-qr="${esc(qrUrl)}" class="qr-box"></div><div>${label}<br>verify.talaan.ph/v/${esc(doc.vt)}</div></button></div>`;
+  return `<div class="qr"><button class="qrbtn" data-verify="${kind}:${doc.no}" aria-label="Scan to verify ${kind === "CM" ? "credit memo" : "invoice"} ${doc.no}"><div data-qr="${esc(qrUrl)}" class="qr-box"></div><div>${label}<br>talaan-bizmaker.vercel.app/v/${esc(doc.vt)}</div></button></div>`;
 }
 function qrBlock(id, label) {
   return id
@@ -2729,9 +2731,25 @@ function renderCore() {
   const appEl = document.querySelector(".app");
   const headerEl = document.getElementById("appHeader");
   if (!me()) {
+    if (view === "verify") {
+      if (headerEl) headerEl.style.display = "none";
+      if (navEl) navEl.style.display = "none";
+      if (appEl) {
+        appEl.classList.remove("auth-mode");
+        appEl.style.gridTemplateColumns = "1fr";
+      }
+      document.getElementById("main").innerHTML = vVerify();
+      renderQRs();
+      const hr = document.getElementById("helpRoot");
+      if (hr) hr.innerHTML = "";
+      return;
+    }
     if (headerEl) headerEl.style.display = "none";
-    navEl.style.display = "none";
-    if (appEl) appEl.classList.add("auth-mode");
+    if (navEl) navEl.style.display = "none";
+    if (appEl) {
+      appEl.classList.add("auth-mode");
+      appEl.style.gridTemplateColumns = "";
+    }
     document.getElementById("main").innerHTML = portalOpen
       ? vPortal()
       : vLogin();
@@ -2740,7 +2758,10 @@ function renderCore() {
     if (hr) hr.innerHTML = "";
     return;
   }
-  if (appEl) appEl.classList.remove("auth-mode");
+  if (appEl) {
+    appEl.classList.remove("auth-mode");
+    appEl.style.gridTemplateColumns = "";
+  }
   document
     .querySelector(".app")
     .classList.toggle("counter-mode", uiMode === "counter");
@@ -6732,6 +6753,19 @@ function openVerify(kind, no, tamper) {
   window.scrollTo(0, 0);
   runVerify();
 }
+function openVerifyByToken(token) {
+  if (!token) return false;
+  const doc = [
+    ...invoices.map((i) => ["INV", i]),
+    ...credits.map((c) => ["CM", c]),
+    ...corrections.map((cr) => ["CR", cr]),
+  ].find(([k, d]) => d && d.vt === token);
+  if (doc) {
+    openVerify(doc[0], doc[1].no);
+    return true;
+  }
+  return false;
+}
 async function runVerify() {
   const doc = docByKind(vState.kind, vState.no);
   if (!doc || !doc.sig) return;
@@ -6752,15 +6786,29 @@ async function runVerify() {
 async function verifyPasted() {
   const u = vState.paste.trim();
   vState.err = "";
-  const m = u.match(/\/v\/([a-z0-9]+)(?:\?d=([A-Za-z0-9_-]+)&s=([A-Za-z0-9_-]+))?/);
+  const m = u.match(/^(?:https?:\/\/)?[^\/\s]*\/v\/([a-z0-9]+)(\?.*)?$/);
   if (!m) {
     vState.err = "That is not a Talaan verification link.";
+    vState.result = null;
     return render();
+  }
+  const token = m[1];
+  const query = m[2];
+  let payloadStr = null, sig = null;
+  if (query) {
+    const qm = query.match(/^\?d=([A-Za-z0-9_-]+)&s=([A-Za-z0-9_-]+)$/);
+    if (!qm) {
+      vState.err = "The verification link query is incomplete or invalid.";
+      vState.result = null;
+      return render();
+    }
+    payloadStr = qm[1];
+    sig = qm[2];
   }
   const doc = [
     ...invoices.map((i) => ["INV", i]),
     ...credits.map((c) => ["CM", c]),
-  ].find(([k, d]) => d.vt === m[1]);
+  ].find(([k, d]) => d.vt === token);
   if (!doc) {
     vState.kind = null;
     vState.result = { ok: false, match: false, payload: "", notFound: true };
@@ -6770,17 +6818,17 @@ async function verifyPasted() {
   vState.no = doc[1].no;
   vState.tamper = false;
   let payload = doc[1].sigPayload;
-  let sig = doc[1].sig;
-  if (m[2] && m[3]) {
+  let docSig = doc[1].sig;
+  if (payloadStr && sig) {
     try {
-      payload = new TextDecoder().decode(unb64u(m[2]));
-      sig = m[3];
+      payload = new TextDecoder().decode(unb64u(payloadStr));
+      docSig = sig;
     } catch (e) {
       vState.err = "The link is damaged.";
       return render();
     }
   }
-  const ok = await verifySig(payload, sig);
+  const ok = await verifySig(payload, docSig);
   vState.result = { ok, match: payload === payloadOf(doc[1], doc[0]), payload };
   render();
 }
@@ -6824,12 +6872,12 @@ function statusOf(doc, kind) {
 }
 function vVerify() {
   const pasteBox = `<div class="panel" style="margin-bottom:16px"><h2>Check a verification link</h2><p class="hint" style="margin-top:0">Paste the link from a scanned QR code, or click the QR code on any invoice or credit memo in this system.</p>
-   <div class="row3"><div><label for="vp">Verification link</label><input id="vp" data-vp="1" value="${esc(vState.paste)}" placeholder="https://verify.talaan.ph/v/…"></div><button class="btn primary" data-act="vpaste">Verify</button></div><div class="err">${esc(vState.err)}</div></div>`;
+   <div class="row3"><div><label for="vp">Verification link</label><input id="vp" data-vp="1" value="${esc(vState.paste)}" placeholder="https://talaan-bizmaker.vercel.app/v/…"></div><button class="btn primary" data-act="vpaste">Verify</button></div><div class="err">${esc(vState.err)}</div></div>`;
   const r = vState.result;
   if (!vState.kind && !r)
-    return `<div class="head"><div><h1>Verify a document</h1><p class="sub">What an examiner, auditor or buyer sees after scanning the QR code on a Talaan invoice or credit memo.</p></div></div>${pasteBox}`;
+    return `<div class="head"><div><h1>Verify a document</h1><p class="sub">What an examiner, auditor or buyer sees after scanning the QR code on a Talaan invoice or credit memo.</p></div>${!me() ? `<a href="/" class="btn link" style="margin-left:auto;text-decoration:none">Staff sign in →</a>` : ""}</div>${pasteBox}`;
   if (r && r.notFound)
-    return `<div class="head"><div><h1>Verify a document</h1></div></div>${pasteBox}<div class="vres bad"><b>No matching document</b>This link does not match any document issued through this system.</div>`;
+    return `<div class="head"><div><h1>Verify a document</h1></div>${!me() ? `<a href="/" class="btn link" style="margin-left:auto;text-decoration:none">Staff sign in →</a>` : ""}</div>${pasteBox}<div class="vres bad"><b>No matching document</b>This link does not match any document issued through this system.</div>`;
   const doc = docByKind(vState.kind, vState.no),
     kind = vState.kind,
     sel =
@@ -6849,8 +6897,8 @@ function vVerify() {
         ? `<div class="vres bad"><b>Not authentic or altered</b>The digital signature does not match the details presented${vState.tamper ? " (the total was changed on this copy)" : ""}. Treat this copy as unreliable and ask the seller for the original.</div>`
         : `<div class="vres warn"><b>Signature valid, record differs</b>Contact the seller.</div>`;
   const shown = r && !r.ok && vState.tamper ? r.payload.split("|") : null;
-  return `<div class="head"><div><h1>${kind === "CR" ? "Correction notice" : kind === "CM" ? "Credit memo" : "Invoice"} verification</h1><p class="sub">Opened from verify.talaan.ph/v/${esc(doc.vt || "")}. This page is the seller's verification service; BIR-prescribed validation will follow its own rules (RMC 98-2026, IV.14).</p></div>
-   <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="vtamper">${vState.tamper ? "Show the genuine copy" : "Try an altered copy"}</button><button class="btn" data-go="verify">Check another link</button></div></div>
+  return `<div class="head"><div><h1>${kind === "CR" ? "Correction notice" : kind === "CM" ? "Credit memo" : "Invoice"} verification</h1><p class="sub">Opened from talaan-bizmaker.vercel.app/v/${esc(doc.vt || "")}. This page is the seller's verification service; BIR-prescribed validation will follow its own rules (RMC 98-2026, IV.14).</p></div>
+   <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="vtamper">${vState.tamper ? "Show the genuine copy" : "Try an altered copy"}</button><button class="btn" data-go="verify">Check another link</button>${!me() ? `<a href="/" class="btn link" style="margin-left:auto;text-decoration:none">Staff sign in →</a>` : ""}</div></div>
   ${res}
   <div class="grid2"><div class="stack">
    <div class="panel"><h2>Document</h2><dl class="kvt">
@@ -12144,6 +12192,19 @@ tally = [
   .filter((t) => t.day === todayISO());
 [...invoices, ...receipts].forEach((x) => (x.buyer = snap(x.customerId)));
 if (location.hash === "#portal") portalOpen = true;
+const urlVerifyToken = (
+  location.pathname.match(/\/v\/([a-z0-9]+)/i) ||
+  location.search.match(/[?&]v=([a-z0-9]+)/i) ||
+  location.hash.match(/[#&]v=([a-z0-9]+)/i) ||
+  []
+)[1];
+if (urlVerifyToken) {
+  view = "verify";
+  vState.paste = location.href;
+  if (!openVerifyByToken(urlVerifyToken)) {
+    vState.result = null;
+  }
+}
 render();
 updatePhClock();
 initSigning().then(async () => {
@@ -12305,13 +12366,28 @@ async function syncWithDb() {
       } else {
         postDbSync("seed_all", { invoices, credits, receipts, settings: S });
       }
+      if (urlVerifyToken && view === "verify" && (!vState.kind || !vState.result?.ok)) {
+        if (!openVerifyByToken(urlVerifyToken)) {
+          vState.result = { ok: false, match: false, payload: "", notFound: true };
+        }
+      }
       render();
     } else {
       isDbConnected = false;
+      if (urlVerifyToken && view === "verify" && (!vState.kind || !vState.result?.ok)) {
+        if (!openVerifyByToken(urlVerifyToken)) {
+          vState.result = { ok: false, match: false, payload: "", notFound: true };
+        }
+      }
       render();
     }
   } catch (e) {
     isDbConnected = false;
+    if (urlVerifyToken && view === "verify" && (!vState.kind || !vState.result?.ok)) {
+      if (!openVerifyByToken(urlVerifyToken)) {
+        vState.result = { ok: false, match: false, payload: "", notFound: true };
+      }
+    }
     render();
   }
 }
