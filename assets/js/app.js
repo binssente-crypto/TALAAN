@@ -2275,7 +2275,7 @@ function bx(rows) {
 }
 /* ===== Signed QR codes (ECDSA P-256, the same algorithm family as the JWS ES256 used for EIS) ===== */
 const SIGN = { priv: null, pub: null, pubJwk: null, ready: false };
-const VERIFY_HOST = "https://talaan-bizmaker.vercel.app/v/";
+const VERIFY_HOST = "https://talaan-bizmaker.vercel.app/?v=";
 function b64u(buf) {
   const b = buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf;
   let s = "";
@@ -2377,7 +2377,7 @@ async function signDoc(doc, kind) {
     new TextEncoder().encode(doc.sigPayload),
   );
   doc.sig = b64u(sig);
-  doc.verifyUrl = `${VERIFY_HOST}${doc.vt}?d=${b64uStr(doc.sigPayload)}&s=${doc.sig}`;
+  doc.verifyUrl = `${VERIFY_HOST}${doc.vt}&d=${b64uStr(doc.sigPayload)}&s=${doc.sig}`;
 }
 async function verifySig(payload, sig) {
   try {
@@ -2397,7 +2397,7 @@ function qrDoc(doc, kind, label) {
   if (!doc.verifyUrl)
     return `<div class="qr"><div>QR code and verification link are assigned when the document is issued.</div></div>`;
   const qrUrl = `${VERIFY_HOST}${doc.vt}`;
-  return `<div class="qr"><button class="qrbtn" data-verify="${kind}:${doc.no}" aria-label="Scan to verify ${kind === "CM" ? "credit memo" : "invoice"} ${doc.no}"><div data-qr="${esc(qrUrl)}" class="qr-box"></div><div>${label}<br>talaan-bizmaker.vercel.app/v/${esc(doc.vt)}</div></button></div>`;
+  return `<div class="qr"><button class="qrbtn" data-verify="${kind}:${doc.no}" aria-label="Scan to verify ${kind === "CM" ? "credit memo" : "invoice"} ${doc.no}"><div data-qr="${esc(qrUrl)}" class="qr-box"></div><div>${label}<br>talaan-bizmaker.vercel.app/?v=${esc(doc.vt)}</div></button></div>`;
 }
 function qrBlock(id, label) {
   return id
@@ -6786,24 +6786,19 @@ async function runVerify() {
 async function verifyPasted() {
   const u = vState.paste.trim();
   vState.err = "";
-  const m = u.match(/^(?:https?:\/\/)?[^\/\s]*\/v\/([a-z0-9]+)(\?.*)?$/);
+  const m = u.match(/(?:[?&]v=|\/v\/)([a-z0-9]+)/i);
   if (!m) {
     vState.err = "That is not a Talaan verification link.";
     vState.result = null;
     return render();
   }
   const token = m[1];
-  const query = m[2];
   let payloadStr = null, sig = null;
-  if (query) {
-    const qm = query.match(/^\?d=([A-Za-z0-9_-]+)&s=([A-Za-z0-9_-]+)$/);
-    if (!qm) {
-      vState.err = "The verification link query is incomplete or invalid.";
-      vState.result = null;
-      return render();
-    }
-    payloadStr = qm[1];
-    sig = qm[2];
+  const dMatch = u.match(/[?&]d=([A-Za-z0-9_-]+)/);
+  const sMatch = u.match(/[?&]s=([A-Za-z0-9_-]+)/);
+  if (dMatch && sMatch) {
+    payloadStr = dMatch[1];
+    sig = sMatch[1];
   }
   const doc = [
     ...invoices.map((i) => ["INV", i]),
@@ -6872,7 +6867,7 @@ function statusOf(doc, kind) {
 }
 function vVerify() {
   const pasteBox = `<div class="panel" style="margin-bottom:16px"><h2>Check a verification link</h2><p class="hint" style="margin-top:0">Paste the link from a scanned QR code, or click the QR code on any invoice or credit memo in this system.</p>
-   <div class="row3"><div><label for="vp">Verification link</label><input id="vp" data-vp="1" value="${esc(vState.paste)}" placeholder="https://talaan-bizmaker.vercel.app/v/…"></div><button class="btn primary" data-act="vpaste">Verify</button></div><div class="err">${esc(vState.err)}</div></div>`;
+   <div class="row3"><div><label for="vp">Verification link</label><input id="vp" data-vp="1" value="${esc(vState.paste)}" placeholder="https://talaan-bizmaker.vercel.app/?v=…"></div><button class="btn primary" data-act="vpaste">Verify</button></div><div class="err">${esc(vState.err)}</div></div>`;
   const r = vState.result;
   if (!vState.kind && !r)
     return `<div class="head"><div><h1>Verify a document</h1><p class="sub">What an examiner, auditor or buyer sees after scanning the QR code on a Talaan invoice or credit memo.</p></div>${!me() ? `<a href="/" class="btn link" style="margin-left:auto;text-decoration:none">Staff sign in →</a>` : ""}</div>${pasteBox}`;
@@ -6897,7 +6892,7 @@ function vVerify() {
         ? `<div class="vres bad"><b>Not authentic or altered</b>The digital signature does not match the details presented${vState.tamper ? " (the total was changed on this copy)" : ""}. Treat this copy as unreliable and ask the seller for the original.</div>`
         : `<div class="vres warn"><b>Signature valid, record differs</b>Contact the seller.</div>`;
   const shown = r && !r.ok && vState.tamper ? r.payload.split("|") : null;
-  return `<div class="head"><div><h1>${kind === "CR" ? "Correction notice" : kind === "CM" ? "Credit memo" : "Invoice"} verification</h1><p class="sub">Opened from talaan-bizmaker.vercel.app/v/${esc(doc.vt || "")}. This page is the seller's verification service; BIR-prescribed validation will follow its own rules (RMC 98-2026, IV.14).</p></div>
+  return `<div class="head"><div><h1>${kind === "CR" ? "Correction notice" : kind === "CM" ? "Credit memo" : "Invoice"} verification</h1><p class="sub">Opened from talaan-bizmaker.vercel.app/?v=${esc(doc.vt || "")}. This page is the seller's verification service; BIR-prescribed validation will follow its own rules (RMC 98-2026, IV.14).</p></div>
    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="vtamper">${vState.tamper ? "Show the genuine copy" : "Try an altered copy"}</button><button class="btn" data-go="verify">Check another link</button>${!me() ? `<a href="/" class="btn link" style="margin-left:auto;text-decoration:none">Staff sign in →</a>` : ""}</div></div>
   ${res}
   <div class="grid2"><div class="stack">

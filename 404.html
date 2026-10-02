@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Verifying Document...</title>
+  <script>
+    var m = location.pathname.match(/\/v\/([a-z0-9]+)/i);
+    if (m) {
+      location.replace('/?v=' + m[1] + (location.search ? '&' + location.search.slice(1) : ''));
+    } else {
+      location.replace('/');
+    }
+  </script>
+</head>
+<body>
+</body>
+</html>

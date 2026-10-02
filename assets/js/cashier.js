@@ -1062,7 +1062,7 @@ function issue() {
     cashier: me.id,
     cashierName: me.name,
     sent: [],
-    verify: `https://talaan-bizmaker.vercel.app/v/${Math.random().toString(16).slice(2, 10)}${Date.now().toString(16).slice(-8)}`,
+    verify: `https://talaan-bizmaker.vercel.app/?v=${Math.random().toString(16).slice(2, 10)}${Date.now().toString(16).slice(-8)}`,
   };
   d.lines.forEach((l) => {
     if (db.stock[l.sku] != null) db.stock[l.sku] -= Number(l.qty);
