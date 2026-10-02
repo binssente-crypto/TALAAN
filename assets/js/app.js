@@ -9561,10 +9561,10 @@ function transmit(no, cb) {
   };
   setTimeout(tick, 650);
 }
-function deliver(no, via, to) {
+function deliver(no, via, to, status = "delivered") {
   const inv = invOf(no);
   if (inv) {
-    inv.deliveries.push({ via, to, at: now(), status: "delivered" });
+    inv.deliveries.push({ via, to, at: now(), status });
     postDbSync("save_invoice", inv);
     render();
   }
@@ -9891,10 +9891,10 @@ document.addEventListener("click", (e) => {
     toast("Sending e-invoice via Brevo...");
     sendInvoiceEmail(inv, v).then((res) => {
       if (res.ok) {
-        deliver(no, "Brevo Email", v);
+        deliver(no, "Brevo Email", v, "delivered");
         toast(`E-invoice ${no} sent to ${v}`);
       } else {
-        deliver(no, "Email attempt", `${v} (failed: ${res.error || "error"})`);
+        deliver(no, "Email attempt", `${v} (failed: ${res.error || "error"})`, "failed");
         toast(`Email failed: ${res.error || "error"}`);
       }
     });
@@ -12321,13 +12321,6 @@ async function syncWithDb() {
           // Normalise optional fields so the rest of the app never sees missing refs/deliveries
           if (!inv.refs || typeof inv.refs !== "object" || Array.isArray(inv.refs)) inv.refs = {};
           if (!Array.isArray(inv.deliveries)) inv.deliveries = [];
-          else {
-            inv.deliveries.forEach((d) => {
-              if (d && d.status === "sending" && d.at && (now() - d.at > 15000)) {
-                d.status = "delivered";
-              }
-            });
-          }
           if (!Array.isArray(inv.items)) inv.items = [];
           // Validate individual items only when the invoice has some
           if (inv.items.length > 0) {
