@@ -11641,9 +11641,15 @@ document.addEventListener("input", (e) => {
     draft.items.forEach((it) => {
       const item = it.itemId && itemById(it.itemId);
       if (item) {
-        const keep = it.qty;
-        applyItem(it, item);
-        it.qty = keep;
+        let pr = priceAt(item, draft.branch);
+        if (isFX(draft)) {
+          const f = rateFor(curOf(draft), draft.txnDate || todayISO());
+          pr = f ? Math.round((pr / f.rate) * 100) / 100 : 0;
+        }
+        it.price =
+          draft.vat && !draft.incl && it.tax === "VATABLE"
+            ? Math.round((pr / 1.12) * 100) / 100
+            : pr;
       } else if (it.tax === "VATABLE" && draft.vat) {
         it.price = el.checked
           ? Math.round(Number(it.price) * 112) / 100
