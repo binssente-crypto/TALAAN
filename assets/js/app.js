@@ -3366,6 +3366,7 @@ function issue() {
       .then((res) => {
         const item = d.deliveries.find((x) => x.to === recipientEmail);
         if (item) item.status = res.ok ? "delivered" : "failed";
+        postDbSync("save_invoice", d);
         if (res.ok) {
           toast(`E-invoice ${d.no} issued and sent to ${recipientEmail}`);
         } else {
@@ -3376,6 +3377,7 @@ function issue() {
       .catch((err) => {
         const item = d.deliveries.find((x) => x.to === recipientEmail);
         if (item) item.status = "failed";
+        postDbSync("save_invoice", d);
         render();
       });
   }
@@ -3519,7 +3521,7 @@ function vDetail() {
       .map(([ok, l]) => `<li class="${ok ? "ok" : "no"}">${l}</li>`)
       .join("")}</ul></div>
     <div class="panel"><h2>Send to buyer</h2>
-     ${i.deliveries.length ? `<ul class="dl">${i.deliveries.map((d) => `<li><b>${d.via}</b>, ${esc(d.to)}<br><span class="due">${fmtDate(d.at)}</span></li>`).join("")}</ul>` : `<p class="due" style="margin:0 0 10px">Not yet sent.</p>`}
+     ${i.deliveries.length ? `<ul class="dl">${i.deliveries.map((d) => `<li><b>${d.via}</b>${d.status ? ` <span class="pill ${d.status === "delivered" ? "s-paid" : d.status === "sending" ? "s-pending" : "s-rejected"}" style="font-size:10px;margin-left:4px">${d.status === "delivered" ? "Delivered" : d.status === "sending" ? "Sending..." : "Failed"}</span>` : ""}, ${esc(d.to)}<br><span class="due">${fmtDate(d.at)}</span></li>`).join("")}</ul>` : `<p class="due" style="margin:0 0 10px">Not yet sent.</p>`}
      ${
        me().roleCode !== "AUDITOR"
          ? `<div class="row3"><div><label for="em">Buyer email</label><input id="em" type="email" value="${esc(b.email || "")}" placeholder="name@company.ph"></div><button class="btn" data-act="email" data-no="${i.no}">Email e-invoice</button></div>
@@ -9560,8 +9562,12 @@ function transmit(no, cb) {
   setTimeout(tick, 650);
 }
 function deliver(no, via, to) {
-  invOf(no).deliveries.push({ via, to, at: now() });
-  render();
+  const inv = invOf(no);
+  if (inv) {
+    inv.deliveries.push({ via, to, at: now(), status: "delivered" });
+    postDbSync("save_invoice", inv);
+    render();
+  }
 }
 function toast(msg) {
   const t = document.getElementById("toast");
@@ -12315,6 +12321,13 @@ async function syncWithDb() {
           // Normalise optional fields so the rest of the app never sees missing refs/deliveries
           if (!inv.refs || typeof inv.refs !== "object" || Array.isArray(inv.refs)) inv.refs = {};
           if (!Array.isArray(inv.deliveries)) inv.deliveries = [];
+          else {
+            inv.deliveries.forEach((d) => {
+              if (d && d.status === "sending" && d.at && (now() - d.at > 15000)) {
+                d.status = "delivered";
+              }
+            });
+          }
           if (!Array.isArray(inv.items)) inv.items = [];
           // Validate individual items only when the invoice has some
           if (inv.items.length > 0) {
