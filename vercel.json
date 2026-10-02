@@ -6,11 +6,7 @@
       "destination": "/cashier.html"
     },
     {
-      "source": "/v/:match*",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/((?!assets/|docs/|api/).*)",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ]
