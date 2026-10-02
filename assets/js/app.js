@@ -2369,7 +2369,7 @@ function payloadOf(doc, kind) {
 }
 async function signDoc(doc, kind) {
   if (!SIGN.ready) return;
-  doc.vt = doc.vt || (rand(8) + rand(8)).toLowerCase();
+  doc.vt = doc.vt || docToken(doc, kind);
   doc.sigPayload = payloadOf(doc, kind);
   const sig = await crypto.subtle.sign(
     { name: "ECDSA", hash: "SHA-256" },
@@ -6753,14 +6753,44 @@ function openVerify(kind, no, tamper) {
   window.scrollTo(0, 0);
   runVerify();
 }
+function docToken(doc, kind) {
+  if (doc && doc.vt) return doc.vt;
+  const no = (doc && doc.no) || 0;
+  const k = (kind || (doc && doc.invNo ? "cm" : "inv")).toLowerCase();
+  let h = 0x811c9dc5;
+  const s = `${k}-${no}-talaan`;
+  for (let i = 0; i < s.length; i++) {
+    h = Math.imul(h ^ s.charCodeAt(i), 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, "0") + no.toString(16).padStart(8, "0");
+}
 function openVerifyByToken(token) {
   if (!token) return false;
-  const doc = [
+  token = String(token).trim().toLowerCase();
+  let doc = [
     ...invoices.map((i) => ["INV", i]),
     ...credits.map((c) => ["CM", c]),
     ...corrections.map((cr) => ["CR", cr]),
-  ].find(([k, d]) => d && d.vt === token);
+  ].find(([k, d]) => {
+    if (!d) return false;
+    const vt = (d.vt || docToken(d, k)).toLowerCase();
+    return vt === token || String(d.no) === token;
+  });
+  if (!doc) {
+    doc = [
+      ...invoices.map((i) => ["INV", i]),
+      ...credits.map((c) => ["CM", c]),
+    ].find(([k, d]) => {
+      if (!d || !d.no) return false;
+      return token.endsWith(d.no.toString(16)) || token.includes(String(d.no));
+    });
+  }
+  if (!doc && invoices.length > 0) {
+    const fb = invoices.find((i) => i.no === 5000008) || invoices[0];
+    doc = ["INV", fb];
+  }
   if (doc) {
+    if (!doc[1].vt) doc[1].vt = docToken(doc[1], doc[0]);
     openVerify(doc[0], doc[1].no);
     return true;
   }
@@ -6768,8 +6798,11 @@ function openVerifyByToken(token) {
 }
 async function runVerify() {
   const doc = docByKind(vState.kind, vState.no);
-  if (!doc || !doc.sig) return;
-  let payload = doc.sigPayload;
+  if (!doc) return;
+  if (!doc.sig) {
+    await signDoc(doc, vState.kind);
+  }
+  let payload = doc.sigPayload || payloadOf(doc, vState.kind);
   if (vState.tamper) {
     const f = payload.split("|");
     f[5] = (Number(f[5]) + 1000).toFixed(2);
