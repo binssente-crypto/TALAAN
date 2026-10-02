@@ -2394,11 +2394,12 @@ async function verifySig(payload, sig) {
 function qrDoc(doc, kind, label) {
   if (!doc.verifyUrl)
     return `<div class="qr"><div>QR code and verification link are assigned when the document is issued.</div></div>`;
-  return `<div class="qr"><button class="qrbtn" data-verify="${kind}:${doc.no}" aria-label="Scan to verify ${kind === "CM" ? "credit memo" : "invoice"} ${doc.no}"><div data-qr="${esc(doc.verifyUrl)}"></div><div>${label}<br>verify.talaan.ph/v/${esc(doc.vt)}</div></button></div>`;
+  const qrUrl = `${VERIFY_HOST}${doc.vt}`;
+  return `<div class="qr"><button class="qrbtn" data-verify="${kind}:${doc.no}" aria-label="Scan to verify ${kind === "CM" ? "credit memo" : "invoice"} ${doc.no}"><div data-qr="${esc(qrUrl)}" class="qr-box"></div><div>${label}<br>verify.talaan.ph/v/${esc(doc.vt)}</div></button></div>`;
 }
 function qrBlock(id, label) {
   return id
-    ? `<div class="qr"><div data-qr="${esc(viewLink(id))}"></div><div>${label}<br>${esc(viewLink(id))}</div></div>`
+    ? `<div class="qr"><div data-qr="${esc(viewLink(id))}" class="qr-box"></div><div>${label}<br>${esc(viewLink(id))}</div></div>`
     : "";
 }
 function advRefs(inv) {
@@ -2578,8 +2579,8 @@ function renderQRs() {
   document.querySelectorAll("[data-qr]").forEach((el) => {
     if (el.dataset.done) return;
     el.dataset.done = 1;
-    const w = el.clientWidth || parseInt(el.style.width, 10) || 128;
-    const h = el.clientHeight || parseInt(el.style.height, 10) || 128;
+    const w = el.clientWidth || parseInt(el.style.width, 10) || 88;
+    const h = el.clientHeight || parseInt(el.style.height, 10) || 88;
     try {
       new QRCode(el, {
         text: el.dataset.qr,
@@ -6751,7 +6752,7 @@ async function runVerify() {
 async function verifyPasted() {
   const u = vState.paste.trim();
   vState.err = "";
-  const m = u.match(/\/v\/([a-z0-9]+)\?d=([A-Za-z0-9_-]+)&s=([A-Za-z0-9_-]+)/);
+  const m = u.match(/\/v\/([a-z0-9]+)(?:\?d=([A-Za-z0-9_-]+)&s=([A-Za-z0-9_-]+))?/);
   if (!m) {
     vState.err = "That is not a Talaan verification link.";
     return render();
@@ -6760,22 +6761,26 @@ async function verifyPasted() {
     ...invoices.map((i) => ["INV", i]),
     ...credits.map((c) => ["CM", c]),
   ].find(([k, d]) => d.vt === m[1]);
-  let payload;
-  try {
-    payload = new TextDecoder().decode(unb64u(m[2]));
-  } catch (e) {
-    vState.err = "The link is damaged.";
-    return render();
-  }
   if (!doc) {
     vState.kind = null;
-    vState.result = { ok: false, match: false, payload, notFound: true };
+    vState.result = { ok: false, match: false, payload: "", notFound: true };
     return render();
   }
   vState.kind = doc[0];
   vState.no = doc[1].no;
   vState.tamper = false;
-  const ok = await verifySig(payload, m[3]);
+  let payload = doc[1].sigPayload;
+  let sig = doc[1].sig;
+  if (m[2] && m[3]) {
+    try {
+      payload = new TextDecoder().decode(unb64u(m[2]));
+      sig = m[3];
+    } catch (e) {
+      vState.err = "The link is damaged.";
+      return render();
+    }
+  }
+  const ok = await verifySig(payload, sig);
   vState.result = { ok, match: payload === payloadOf(doc[1], doc[0]), payload };
   render();
 }

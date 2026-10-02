@@ -923,8 +923,8 @@ function renderQR() {
     try {
       new QRCode(el, {
         text: el.dataset.qr,
-        width: 128,
-        height: 128,
+        width: 88,
+        height: 88,
         correctLevel: QRCode.CorrectLevel.M,
       });
     } catch (e) {
