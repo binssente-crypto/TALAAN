@@ -2660,7 +2660,7 @@ function newDraft() {
     customerId: "",
     salesType: "CHARGE",
     vat: S.vat,
-    incl: false,
+    incl: S.vat,
     items: [
       { desc: "", qty: 1, price: 0, tax: S.vat ? "VATABLE" : "SSPT", disc: 0 },
     ],
@@ -5427,8 +5427,8 @@ function applyItem(it, item) {
     pr = f ? Math.round((pr / f.rate) * 100) / 100 : 0;
   }
   it.price =
-    draft.vat && draft.incl && tax === "VATABLE"
-      ? Math.round(pr * 112) / 100
+    draft.vat && !draft.incl && tax === "VATABLE"
+      ? Math.round((pr / 1.12) * 100) / 100
       : pr;
 }
 function isStockLine(it) {
@@ -5697,7 +5697,7 @@ function vProducts() {
         )
         .join("")}</select></div>
       <div style="display:flex;gap:8px;align-items:flex-end"><button class="btn primary" data-act="itemnew">Add item</button><button class="btn" data-act="impstart">Import from CSV</button></div></div>
-     <div class="tablewrap"><table><thead><tr><th>SKU</th><th>Description</th><th>Unit</th><th class="num">Selling price</th><th>Tax treatment</th><th class="num">On hand</th><th class="num">Avg cost</th><th class="num">Stock value</th><th></th></tr></thead><tbody id="itemBody">${itemRows(pageList)}</tbody></table></div>${pager("ppage", pPage, pages, list.length)}`;
+     <div class="tablewrap"><table><thead><tr><th>SKU</th><th>Description</th><th>Unit</th><th class="num">Selling price<br><span style="font-weight:normal;font-size:11px;color:var(--muted)">${S.vat ? "VAT-inclusive" : "net of tax"}</span></th><th>Tax treatment</th><th class="num">On hand</th><th class="num">Avg cost</th><th class="num">Stock value</th><th></th></tr></thead><tbody id="itemBody">${itemRows(pageList)}</tbody></table></div>${pager("ppage", pPage, pages, list.length)}`;
   }
   if (pTab === "docs") {
     body = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><button class="btn primary" data-act="sdnew" data-type="PURCHASE">Receive a purchase</button><button class="btn" data-act="sdnew" data-type="SUPRETURN">Return to supplier</button><button class="btn" data-act="sdnew" data-type="TRANSFER">Transfer to another branch</button><button class="btn" data-act="sdnew" data-type="ADJ">Stock adjustment</button></div>
@@ -5894,7 +5894,7 @@ function impPanel() {
   const S2 = impState,
     ok = S2 ? S2.rows.filter((r) => r.status !== "ERROR") : [];
   return `<div class="panel" style="background:var(--soft);margin-bottom:14px"><h2>Import items from a CSV file</h2>
-   <p class="hint" style="margin-top:0">Columns: ${IMP_COLS.join(", ")}. Tax treatment: VATable, Exempt or Zero-rated. Type: Goods or Service. Existing SKUs are updated (not their stock); new SKUs are added, with an optional opening balance for goods.</p>
+   <p class="hint" style="margin-top:0">Columns: ${IMP_COLS.join(", ")}. Selling price is VAT-inclusive for VATable items. Tax treatment: VATable, Exempt or Zero-rated. Type: Goods or Service. Existing SKUs are updated (not their stock); new SKUs are added, with an optional opening balance for goods.</p>
    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn" data-act="imptemplate">Download template</button><label class="btn" style="cursor:pointer">Choose CSV file<input type="file" accept=".csv,text/csv" data-impfile="1" style="display:none"></label>${S2 ? `<span class="due">${esc(S2.name)}: ${S2.rows.length} row(s)</span>` : ""}</div>
    ${
      S2
@@ -6238,7 +6238,7 @@ function helpHtml() {
   if (!helpOpen)
     return `<button class="helpfab" data-act="helptoggle" aria-expanded="false">Help</button>`;
   const t = myThread();
-  return `<div class="helppanel" role="dialog" aria-label="Help and support"><div class="hh"><button class="btn" data-act="helptab" data-tab="assistant" aria-pressed="${helpTab === "assistant"}">Help assistant</button><button class="btn" data-act="helptab" data-tab="support" aria-pressed="${helpTab === "support"}">Talk to support</button><span style="flex:1"></span><button class="btn link" data-act="helptoggle" aria-label="Close help">Close</button></div>
+  return `<div class="helppanel" role="dialog" aria-label="Help and support"><div class="hh"><button class="btn" data-act="helptab" data-tab="assistant" aria-pressed="${helpTab === "assistant"}">Help assistant</button><button class="btn" data-act="helptab" data-tab="support" aria-pressed="${helpTab === "support"}">Talk to support</button><a href="/docs/Talaan-Admin-and-Office-Manual.pdf" target="_blank" rel="noopener" class="btn" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px" title="Open Admin & Office Manual (PDF)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Admin Manual</a><span style="flex:1"></span><button class="btn link" data-act="helptoggle" aria-label="Close help">Close</button></div>
    ${
      helpTab === "assistant"
        ? `<div class="hb"><p class="hint" style="margin-top:0">Ask how to do something in Talaan.${SAMPLE ? "" : " Answers come from the built-in help articles."}</p>${helpAns ? `<div class="msg" id="helpAns">${esc(helpAns)}</div>` : `<div class="hint">Try: "How do I reprint an invoice?" or "How do I record a check payment?"</div>`}</div>
@@ -6293,6 +6293,11 @@ function pager(act, page, pages, total) {
 function catOf(i) {
   return i.category || (i.type === "GOODS" ? "Products" : "Services");
 }
+function netHint(f) {
+  return f && f.tax === "VATABLE" && S.vat && Number(f.price) > 0
+    ? `Net of VAT ${peso(Math.round(cents(f.price) / 1.12))}; VAT ${peso(cents(f.price) - Math.round(cents(f.price) / 1.12))}`
+    : "";
+}
 function categories() {
   return [...new Set(ITEMS.map(catOf))].sort();
 }
@@ -6328,7 +6333,7 @@ function itemRows(list) {
           .map((k) => ` <span class="pill s-draft">${esc(k)}</span>`)
           .join(
             "",
-          )}</td><td>${esc(i.uom)}</td><td class="num">${peso(cents(stockLoc() ? priceAt(i, stockLoc()) : i.price))}${Object.values(i.branchPrices || {}).some((v) => v !== "" && v != null) ? '<br><span class="due">branch prices set</span>' : ""}</td><td>${TAX_VAT[i.tax] || TAX_NV[i.tax]}</td>
+          )}</td><td>${esc(i.uom)}</td><td class="num">${peso(cents(stockLoc() ? priceAt(i, stockLoc()) : i.price))}${i.tax === "VATABLE" && S.vat ? `<br><span class="due">net ${peso(Math.round(cents(stockLoc() ? priceAt(i, stockLoc()) : i.price) / 1.12))}</span>` : ""}${Object.values(i.branchPrices || {}).some((v) => v !== "" && v != null) ? '<br><span class="due">branch prices set</span>' : ""}</td><td>${TAX_VAT[i.tax] || TAX_NV[i.tax]}</td>
   <td class="num${g && h <= i.reorder ? " low" : ""}">${g ? fmtQty(h) : "—"}</td><td class="num">${g ? peso(avgCost(i.id, stockLoc())) : "—"}</td><td class="num">${g ? peso(Math.round(h * avgCost(i.id, stockLoc()))) : "—"}</td><td><button class="btn link" data-act="itemedit" data-id="${i.id}">Edit</button></td></tr>`;
       })
       .join("") || `<tr><td colspan="9" class="due">No items match.</td></tr>`
@@ -6343,8 +6348,8 @@ function itemFormHtml() {
     <div><span class="lbl">Type</span><div class="seg" role="radiogroup" aria-label="Item type"><label><input type="radio" name="ift" data-if="type" value="GOODS"${f.type === "GOODS" ? " checked" : ""}>Goods (stocked)</label><label><input type="radio" name="ift" data-if="type" value="SERVICE"${f.type === "SERVICE" ? " checked" : ""}>Service</label></div></div></div>
    <div class="fields"><div style="grid-column:1/-1"><label for="if-d">Description as printed on the invoice</label><input id="if-d" data-if="desc" value="${esc(f.desc)}"></div></div>
    <div class="fields"><div><label for="if-u">Unit of measure</label><input id="if-u" data-if="uom" list="uomlist" value="${esc(f.uom)}"><datalist id="uomlist">${UOMS.map((u) => `<option value="${u}">`).join("")}</datalist></div>
-    <div><label for="if-p">Selling price, net of VAT</label><input id="if-p" type="number" step="0.01" min="0" data-if="price" value="${esc(f.price)}"></div>
-    <div><span class="lbl">Branch prices, net of VAT (blank = same as above)</span>${BRS.filter(
+    <div><label for="if-p" id="if-p-lbl">Selling price${f.tax === "VATABLE" && S.vat ? ", VAT-inclusive" : ""}</label><input id="if-p" type="number" step="0.01" min="0" data-if="price" value="${esc(f.price)}"><p class="hint" id="if-net" style="margin:4px 0 0">${netHint(f)}</p></div>
+    <div><span class="lbl">Branch prices, same VAT basis (blank = same as above)</span>${BRS.filter(
       (b) => b.active,
     )
       .map(
@@ -6482,7 +6487,7 @@ function vItem() {
   const i = itemById(current),
     L = stockLoc(),
     m = i.type === "GOODS" ? movesOf(i.id, L) : [];
-  return `<div class="head"><div><h1>${esc(i.sku)}</h1><p class="sub">${esc(i.desc)}. Unit: ${esc(i.uom)}. Selling price ${peso(cents(i.price))}${Object.entries(
+  return `<div class="head"><div><h1>${esc(i.sku)}</h1><p class="sub">${esc(i.desc)}. Unit: ${esc(i.uom)}. Selling price ${peso(cents(i.price))}${i.tax === "VATABLE" && S.vat ? " (VAT-inclusive)" : ""}${Object.entries(
     i.branchPrices || {},
   )
     .filter(([k, v]) => v !== "" && v != null)
@@ -11298,6 +11303,13 @@ document.addEventListener("input", (e) => {
   if (el.dataset.if && itemForm) {
     itemForm[el.dataset.if] = el.value;
     if (el.dataset.if === "type") render();
+    else if (el.dataset.if === "price" || el.dataset.if === "tax") {
+      const netEl = document.getElementById("if-net");
+      if (netEl) netEl.textContent = netHint(itemForm);
+      const lblEl = document.getElementById("if-p-lbl");
+      if (lblEl)
+        lblEl.textContent = `Selling price${itemForm.tax === "VATABLE" && S.vat ? ", VAT-inclusive" : ""}`;
+    }
     return;
   }
   if (view === "newStock" && sDraft) {
@@ -11626,7 +11638,19 @@ document.addEventListener("input", (e) => {
   }
   if (f === "incl") {
     draft.incl = el.checked;
-    refreshEditor();
+    draft.items.forEach((it) => {
+      const item = it.itemId && itemById(it.itemId);
+      if (item) {
+        const keep = it.qty;
+        applyItem(it, item);
+        it.qty = keep;
+      } else if (it.tax === "VATABLE" && draft.vat) {
+        it.price = el.checked
+          ? Math.round(Number(it.price) * 112) / 100
+          : Math.round((Number(it.price) / 1.12) * 100) / 100;
+      }
+    });
+    render();
     return;
   }
   if (f === "manual") {
@@ -11790,6 +11814,17 @@ document.addEventListener("input", (e) => {
 });
 document.addEventListener("change", (e) => {
   const el = e.target;
+  if (
+    el.dataset.if &&
+    itemForm &&
+    (el.dataset.if === "tax" || el.dataset.if === "price")
+  ) {
+    const netEl = document.getElementById("if-net");
+    if (netEl) netEl.textContent = netHint(itemForm);
+    const lblEl = document.getElementById("if-p-lbl");
+    if (lblEl)
+      lblEl.textContent = `Selling price${itemForm.tax === "VATABLE" && S.vat ? ", VAT-inclusive" : ""}`;
+  }
   if (el.dataset.pfile && portalForm) {
     const fl = el.files && el.files[0];
     if (fl) {
