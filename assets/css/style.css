@@ -2419,6 +2419,11 @@ pre {
     align-items: center;
     justify-content: center;
   }
+  body.unauth .hamburger-btn,
+  body.unauth .pull-tab,
+  body.unauth .nav-overlay {
+    display: none !important;
+  }
   .nav-overlay {
     display: block;
   }

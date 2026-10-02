@@ -59,6 +59,7 @@ document.addEventListener("click", (e) => {
   }
   // Mobile drawer open
   if (e.target.closest("#mobileMenuBtn") || e.target.closest("#pullTab")) {
+    if (!me()) return;
     const appEl = document.querySelector(".app");
     const overlay = document.getElementById("navOverlay");
     if (appEl) appEl.classList.add("mobile-nav-open");
@@ -2730,6 +2731,17 @@ function renderCore() {
   const navEl = document.querySelector("nav.side");
   const appEl = document.querySelector(".app");
   const headerEl = document.getElementById("appHeader");
+  const pullTab = document.getElementById("pullTab");
+  const mobMenuBtn = document.getElementById("mobileMenuBtn");
+  const navOverlay = document.getElementById("navOverlay");
+
+  if (pullTab) pullTab.style.display = me() ? "" : "none";
+  if (mobMenuBtn) mobMenuBtn.style.display = me() ? "" : "none";
+  if (!me() && navOverlay) navOverlay.classList.remove("show");
+  if (typeof document !== "undefined" && document.body) {
+    document.body.classList.toggle("unauth", !me());
+  }
+
   if (!me()) {
     if (view === "verify") {
       if (headerEl) headerEl.style.display = "none";
